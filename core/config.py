@@ -59,7 +59,11 @@ def load() -> dict:
     cfg = json.loads(json.dumps(DEFAULTS))
     if CONFIG_FILE.exists():
         try:
-            cfg = _deep_merge(cfg, json.loads(CONFIG_FILE.read_text(encoding="utf-8")))
+            # utf-8-sig, а не utf-8: Блокнот и PowerShell 5.1 ставят в начало файла
+            # невидимую метку BOM, и json на ней спотыкается. Проверка установки
+            # 05.10.2026: настройки не прочитались, Джарвис взял значения по
+            # умолчанию и заговорил механическим голосом вместо живого.
+            cfg = _deep_merge(cfg, json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig")))
         except Exception as e:
             print(f"[config] settings.json битый ({e}), беру значения по умолчанию")
     return cfg
@@ -74,12 +78,14 @@ def env(key: str, default: str = "") -> str:
     if os.environ.get(key):
         return os.environ[key]
     if ENV_FILE.exists():
-        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        for line in ENV_FILE.read_text(encoding="utf-8-sig").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
             k, _, v = line.partition("=")
             if k.strip() == key:
+                # Хвостовой комментарий — не часть ключа: «KEY=abc  # зачем он»
+                v = v.split("#", 1)[0] if "#" in v else v
                 return v.strip().strip('"').strip("'")
     return default
 

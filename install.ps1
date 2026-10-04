@@ -22,12 +22,23 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Без полос прогресса: при проверке 05.10.2026 Expand-Archive залил ими весь
+# экран, и собственные сообщения установщика потерялись. Побочная польза —
+# Invoke-WebRequest без полосы качает заметно быстрее.
+$ProgressPreference = 'SilentlyContinue'
 $Repo = 'https://github.com/Wels112/jarvis'          # подставляется при публикации
 $Branch = 'main'
 
 function Шаг($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
 function Готово($text) { Write-Host "    $text" -ForegroundColor Green }
 function Беда($text) { Write-Host "    $text" -ForegroundColor Yellow }
+
+# Запись без BOM. PowerShell 5.1 по «-Encoding utf8» ставит в начало файла
+# невидимую метку, и Python на ней спотыкается: при проверке установки
+# 05.10.2026 из-за неё не прочитались настройки и голос стал механическим.
+function Save-Utf8($path, $text) {
+    [IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $false))
+}
 
 Write-Host @'
   Джарвис — голосовой помощник для Windows
@@ -104,26 +115,27 @@ Write-Host '    Ключ Gemini бесплатный: aistudio.google.com/apikey
 Write-Host '    Без него работают только простые команды (время, громкость, программы).'
 $key = if ($Unattended) { $GeminiKey } else { Read-Host '    Вставь ключ Gemini (Enter — пропустить)' }
 if ($key) {
-    (Get-Content $envFile -Raw) -replace 'GEMINI_API_KEY=.*', "GEMINI_API_KEY=$key" |
-        Set-Content $envFile -Encoding utf8
+    Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'GEMINI_API_KEY=.*', "GEMINI_API_KEY=$key")
     Готово 'ключ записан'
 }
 Write-Host '    Чтобы управлять с телефона, нужен бот: напиши @BotFather команду /newbot'
 $bot = if ($Unattended) { $BotToken } else { Read-Host '    Вставь токен бота (Enter — пропустить)' }
 if ($bot) {
-    (Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot" |
-        Set-Content $envFile -Encoding utf8
+    Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot")
     Готово 'токен записан, номер своего чата Джарвис подскажет при первом сообщении'
 }
 $name = if ($Unattended) { $OwnerName } else { Read-Host '    Как к тебе обращаться? [хозяин]' }
 if ($name) {
     $s = Get-Content "$root\config\settings.json" -Raw | ConvertFrom-Json
     $s.owner = $name
-    $s | ConvertTo-Json -Depth 9 | Set-Content "$root\config\settings.json" -Encoding utf8
+    Save-Utf8 "$root\config\settings.json" ($s | ConvertTo-Json -Depth 9)
 }
 
 # --- 6. Модель распознавания ----------------------------------------------
 Шаг 'Скачиваю модель распознавания речи (около 600 МБ)'
+# Предупреждение про символические ссылки выглядит как поломка, хотя ничего не
+# ломает: на Windows без режима разработчика их просто нет, файлы копируются
+$env:HF_HUB_DISABLE_SYMLINKS_WARNING = '1'
 & $py -c @"
 import sys
 sys.path.insert(0, r'$root')

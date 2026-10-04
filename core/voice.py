@@ -35,6 +35,40 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 CHUNK_LIMIT = 220        # символов за один проход синтеза
 
 
+# Сбои, которые лечатся повтором: пустой ответ, обрыв связи, таймаут
+TRANSIENT = re.compile(r"No audio was received|timed out|timeout|connection|closed|"
+                       r"temporarily|reset by peer|10054|handshake", re.I)
+
+
+def speakable(text: str) -> str:
+    """Убрать из текста то, что нельзя произнести.
+
+    Проверка установки 05.10.2026: на ответ «что открыто» Microsoft вернул
+    «No audio was received» и Джарвис заговорил механическим голосом. Причина
+    была в заголовках окон: Telegram прячет в них невидимые метки направления
+    текста (U+200E), и синтезатор на них отказывается работать совсем.
+
+    Заодно выкидываем разметку, которая иначе читается вслух как мусор:
+    звёздочки, решётки, вертикальные черты, обратные кавычки.
+    """
+    import unicodedata
+    out = []
+    for ch in str(text):
+        kind = unicodedata.category(ch)
+        if kind in ("Cf", "Cs", "Co", "Cn"):          # невидимые и служебные
+            continue
+        code = ord(ch)
+        # Эмодзи — по блокам, а не по категории «символ»: в ту же категорию
+        # попадают «°» и «№», а они в речи нужны («15°» — «пятнадцать градусов»)
+        if 0x1F000 <= code <= 0x1FAFF or 0x2600 <= code <= 0x27BF or code == 0xFE0F:
+            continue
+        if kind == "Cc" and ch not in "\n\t":         # управляющие
+            continue
+        out.append(" " if ch in "|*_`#<>{}[]\\~^" else ch)
+    clean = re.sub(r"\s+", " ", "".join(out)).strip(" ;,.-–—")
+    return clean
+
+
 def _split_sentences(text: str, limit: int = CHUNK_LIMIT):
     """Режем по предложениям: первое зазвучит раньше, а синтез не упрётся в предел."""
     sentences = re.split(r"(?<=[.!?;])\s+", text)
@@ -286,6 +320,21 @@ class Voice:
                 return self._trim(pcm, rate), rate
             except Exception as e:
                 print(f"[voice] {engine.name} не ответил: {str(e)[:70]}")
+                # «No audio was received» у Microsoft случается на ровном месте:
+                # связь дрогнула, и ответ пришёл пустым. Замер 05.10.2026 на этой
+                # машине (интернет через VPN) — срывается примерно каждая пятая
+                # попытка, причём одна и та же фраза то проходит, то нет. Одного
+                # повтора не хватало: два срыва подряд случались на глазах, и голос
+                # скатывался на механический. Три попытки оставляют меньше процента.
+                if TRANSIENT.search(str(e)):
+                    for attempt in (2, 3):
+                        time.sleep(0.3 * attempt)
+                        try:
+                            pcm, rate = engine.synth(engine.prepare(chunk))
+                            print(f"[voice] {engine.name} ответил с попытки {attempt}")
+                            return self._trim(pcm, rate), rate
+                        except Exception as again:
+                            print(f"[voice] {engine.name}, попытка {attempt}: {str(again)[:50]}")
                 if engine is self.primary and self.fallback is None and not self._fallback_loading:
                     # Интернет пропал — поднимаем локальный голос в фоне, а пока говорит Ирина
                     self._fallback_loading = True
@@ -363,8 +412,11 @@ class Voice:
     def say(self, text: str, block: bool = False):
         if not text:
             return
-        text = str(text).strip()
-        print(f"🔊 {text}")
+        shown = str(text).strip()
+        print(f"🔊 {shown}")
+        text = speakable(shown)
+        if not text:
+            return
         if self.sapi:
             self.sapi.say(text)
             if block:
