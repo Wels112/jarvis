@@ -8,6 +8,18 @@
 #
 # Файл сохранён с BOM намеренно: PowerShell 5.1 читает UTF-8 без BOM как ANSI
 # и портит русский текст.
+#
+# Без вопросов (для проверки и для установки на чужой машине заранее):
+#   .\install.ps1 -Unattended -Root D:\jarvis -GeminiKey ключ
+
+param(
+    [switch]$Unattended,      # ничего не спрашивать, брать значения из параметров
+    [string]$Root,            # куда ставить
+    [string]$GeminiKey,
+    [string]$BotToken,
+    [string]$OwnerName,
+    [switch]$NoShortcut       # не класть ярлык на рабочий стол
+)
 
 $ErrorActionPreference = 'Stop'
 $Repo = 'https://github.com/Wels112/jarvis'          # подставляется при публикации
@@ -48,8 +60,12 @@ $disks = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 6GB } |
 if (-not $disks) { Беда 'Нужно хотя бы 6 ГБ свободного места.'; return }
 $best = $disks[0].Name
 foreach ($d in $disks) { Write-Host ("    {0}: свободно {1:N0} ГБ" -f $d.Name, ($d.Free / 1GB)) }
-$answer = Read-Host "    Куда поставить? [${best}:\jarvis]"
-$root = if ($answer) { $answer } else { "${best}:\jarvis" }
+if ($Root) { $root = $Root }
+elseif ($Unattended) { $root = "${best}:\jarvis" }
+else {
+    $answer = Read-Host "    Куда поставить? [${best}:\jarvis]"
+    $root = if ($answer) { $answer } else { "${best}:\jarvis" }
+}
 New-Item -ItemType Directory -Force $root | Out-Null
 Готово "ставлю в $root"
 
@@ -86,20 +102,20 @@ if (-not (Test-Path "$root\config\settings.json")) {
 }
 Write-Host '    Ключ Gemini бесплатный: aistudio.google.com/apikey'
 Write-Host '    Без него работают только простые команды (время, громкость, программы).'
-$key = Read-Host '    Вставь ключ Gemini (Enter — пропустить)'
+$key = if ($Unattended) { $GeminiKey } else { Read-Host '    Вставь ключ Gemini (Enter — пропустить)' }
 if ($key) {
     (Get-Content $envFile -Raw) -replace 'GEMINI_API_KEY=.*', "GEMINI_API_KEY=$key" |
         Set-Content $envFile -Encoding utf8
     Готово 'ключ записан'
 }
 Write-Host '    Чтобы управлять с телефона, нужен бот: напиши @BotFather команду /newbot'
-$bot = Read-Host '    Вставь токен бота (Enter — пропустить)'
+$bot = if ($Unattended) { $BotToken } else { Read-Host '    Вставь токен бота (Enter — пропустить)' }
 if ($bot) {
     (Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot" |
         Set-Content $envFile -Encoding utf8
     Готово 'токен записан, номер своего чата Джарвис подскажет при первом сообщении'
 }
-$name = Read-Host '    Как к тебе обращаться? [хозяин]'
+$name = if ($Unattended) { $OwnerName } else { Read-Host '    Как к тебе обращаться? [хозяин]' }
 if ($name) {
     $s = Get-Content "$root\config\settings.json" -Raw | ConvertFrom-Json
     $s.owner = $name
@@ -122,13 +138,17 @@ for size in ('tiny', 'small'):
 # --- 7. Проверка -----------------------------------------------------------
 Шаг 'Проверяю'
 & $py "$root\setup.py" --check
-$lnk = "$([Environment]::GetFolderPath('Desktop'))\Джарвис.lnk"
-$shell = New-Object -ComObject WScript.Shell
-$sc = $shell.CreateShortcut($lnk)
-$sc.TargetPath = "$root\jarvis.bat"
-$sc.WorkingDirectory = $root
-$sc.Save()
-Готово "ярлык на рабочем столе: Джарвис"
+# Ярлык кладём, только если это настоящая установка: при проверке он затёр бы
+# рабочий ярлык хозяина, переставив его на тестовую папку
+if (-not $NoShortcut) {
+    $lnk = "$([Environment]::GetFolderPath('Desktop'))\Джарвис.lnk"
+    $shell = New-Object -ComObject WScript.Shell
+    $sc = $shell.CreateShortcut($lnk)
+    $sc.TargetPath = "$root\jarvis.bat"
+    $sc.WorkingDirectory = $root
+    $sc.Save()
+    Готово "ярлык на рабочем столе: Джарвис"
+}
 
 Write-Host "`nГотово. Запусти ярлык и скажи «Джарвис, привет»." -ForegroundColor Green
 Write-Host "Автозапуск при включении компьютера: $root\автозапуск.bat`n"
