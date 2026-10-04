@@ -15,7 +15,7 @@
 Одной строкой в PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/OWNER/jarvis/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1 | iex
 ```
 
 Установщик сам найдёт Python, выберет диск с местом, поставит зависимости,

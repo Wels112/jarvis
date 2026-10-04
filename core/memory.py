@@ -468,9 +468,9 @@ if __name__ == "__main__":
     sys.path.insert(0, str(ROOT))
     from core import config
     config.setup_console()
-    print(remember("Хозяина зовут Иван, он ведёт англоязычный YouTube-канал ytfactory"))
+    print(remember("Хозяин работает по ночам и не любит лишних вопросов"))
     print(remember("Бюджет на инструменты — строго ноль долларов", tag="проект"))
-    print(recall("канал"))
+    print(recall("бюджет"))
     print(add_task("созвон с подрядчиком", "завтра в 15"))
     print(add_task("выложить ролик", "через 2 часа"))
     print(list_tasks("today"))

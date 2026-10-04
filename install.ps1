@@ -1,6 +1,6 @@
 ﻿# Установщик Джарвиса. Запуск одной строкой в PowerShell:
 #
-#   irm https://raw.githubusercontent.com/OWNER/jarvis/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1 | iex
 #
 # Что делает: находит настоящий Python, кладёт проект и окружение на диск с
 # местом, ставит зависимости, скачивает модель распознавания, спрашивает ключи
@@ -10,7 +10,7 @@
 # и портит русский текст.
 
 $ErrorActionPreference = 'Stop'
-$Repo = 'https://github.com/OWNER/jarvis'          # подставляется при публикации
+$Repo = 'https://github.com/Wels112/jarvis'          # подставляется при публикации
 $Branch = 'main'
 
 function Шаг($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
