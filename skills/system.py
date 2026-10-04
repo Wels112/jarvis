@@ -1,0 +1,620 @@
+# -*- coding: utf-8 -*-
+"""Руки Джарвиса: управление компьютером.
+
+Программы не захардкожены: модуль собирает список всего, что установлено, и
+запускает по нечёткому совпадению названия («открой стим», «запусти фотошоп»).
+
+Список собирается из двух источников. Раньше был только один — ярлыки меню
+«Пуск», — и живой тест 15.09.2026 показал дыру: Claude стоит из Microsoft Store,
+ярлыка у Store-приложений нет, и Джарвис его «не находил», пытаясь открыть сайт
+и угадывать пути в AppData. Теперь основной источник — Get-StartApps, полный
+список приложений Windows, включая Store; ярлыки дополняют его путями к exe,
+по которым потом находится процесс при закрытии.
+"""
+import os
+import json
+import re
+import shutil
+import subprocess
+import ctypes
+import difflib
+import time
+import webbrowser
+from pathlib import Path
+from datetime import datetime
+
+import psutil
+
+START_MENUS = [
+    Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+    Path(os.environ.get("PROGRAMDATA", "")) / "Microsoft/Windows/Start Menu/Programs",
+]
+CACHE = Path(__file__).resolve().parent.parent / "data" / "apps_index_v2.json"
+CACHE_MAX_AGE = 24 * 3600          # старый список жил с 3 сентября и ни разу не обновлялся
+
+# Как программу называют вслух → как искать в списке
+ALIASES = {
+    "браузер": "chrome", "хром": "chrome", "гугл хром": "chrome", "эдж": "edge",
+    "блокнот": "notepad", "калькулятор": "calc", "проводник": "explorer",
+    "диспетчер задач": "taskmgr", "паинт": "mspaint", "пейнт": "mspaint",
+    "консоль": "cmd", "терминал": "wt", "пауэршелл": "powershell",
+    "телеграм": "telegram", "телега": "telegram", "дискорд": "discord",
+    "стим": "steam", "ворд": "word", "эксель": "excel",
+    "вс код": "visual studio code", "вскод": "visual studio code",
+    "vs code": "visual studio code", "vscode": "visual studio code",
+    "визуал студио код": "visual studio code", "код": "visual studio code",
+    "клод": "claude", "клауд": "claude",
+    "настройки": "ms-settings:", "панель управления": "control",
+}
+
+# У некоторых программ процесс называется не так, как само приложение
+PROCESS_NAMES = {
+    "visual studio code": "code", "google chrome": "chrome", "microsoft edge": "msedge",
+    "yandex": "browser", "яндекс браузер": "browser", "telegram desktop": "telegram",
+}
+
+# Служебные пункты меню «Пуск», которые не нужно открывать по названию программы
+NOT_APPS = re.compile(r"uninstall|удал(ить|ение)|readme|справка|help|documentation|"
+                      r"release notes|license|лицензи|website|веб-сайт", re.I)
+
+# Слова вокруг названия: по ним программу не ищем
+NOT_NAMES = {"открой", "открыть", "откройте", "запусти", "запустить", "включи", "включить",
+             "покажи", "давай", "мне", "пожалуйста", "программу", "программа", "приложение",
+             "приложуху", "файл", "папку", "документ", "окно", "что", "нибудь", "там"}
+
+SITES = {
+    "ютуб": "https://www.youtube.com", "youtube": "https://www.youtube.com",
+    "гугл": "https://www.google.com", "почта": "https://mail.google.com",
+    "гмейл": "https://mail.google.com", "переводчик": "https://translate.google.com",
+    "карты": "https://maps.google.com", "гитхаб": "https://github.com",
+    "вк": "https://vk.com", "твич": "https://twitch.tv",
+    "чат гпт": "https://chat.openai.com",
+}
+# Сайт — только если такой программы на компьютере нет: «открой клод» должно
+# открыть приложение, а не вкладку, как вышло на живом тесте
+SITE_FALLBACK = {"claude": "https://claude.ai", "telegram": "https://web.telegram.org",
+                 "discord": "https://discord.com/app"}
+
+
+# ---------------- список установленных программ ----------------
+def _start_apps() -> list:
+    """Get-StartApps: все приложения меню «Пуск», включая Microsoft Store."""
+    cmd = ("[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
+           "Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress")
+    try:
+        out = subprocess.run(["powershell", "-NoProfile", "-Command", cmd],
+                             capture_output=True, timeout=40).stdout.decode("utf-8", "replace")
+        data = json.loads(out) if out.strip() else []
+        return data if isinstance(data, list) else [data]
+    except Exception:
+        return []
+
+
+def _shortcut_target(lnk: Path) -> str:
+    try:
+        import win32com.client
+        return win32com.client.Dispatch("WScript.Shell").CreateShortcut(str(lnk)).TargetPath or ""
+    except Exception:
+        return ""
+
+
+def build_app_index(force: bool = False) -> dict:
+    """название → {name, aumid, lnk, exe}. Кэш на сутки."""
+    if not force and CACHE.exists() and time.time() - CACHE.stat().st_mtime < CACHE_MAX_AGE:
+        try:
+            return json.loads(CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    index = {}
+    for app in _start_apps():
+        name, aumid = (app.get("Name") or "").strip(), (app.get("AppID") or "").strip()
+        if name and aumid and not NOT_APPS.search(name):
+            # У обычных программ AppID — это путь к exe: из него берётся имя процесса
+            exe = Path(aumid).stem.lower() if aumid.lower().endswith(".exe") else ""
+            index[name.lower()] = {"name": name, "aumid": aumid, "lnk": "", "exe": exe}
+    for root in START_MENUS:
+        if not root.exists():
+            continue
+        for lnk in root.rglob("*.lnk"):
+            if NOT_APPS.search(lnk.stem):
+                continue
+            target = _shortcut_target(lnk)
+            entry = index.setdefault(lnk.stem.lower(),
+                                     {"name": lnk.stem, "aumid": "", "lnk": "", "exe": ""})
+            entry["lnk"] = str(lnk)
+            if target.lower().endswith(".exe"):
+                entry["exe"] = Path(target).stem.lower()
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    CACHE.write_text(json.dumps(index, ensure_ascii=False, indent=1), encoding="utf-8")
+    return index
+
+
+def _score(query: str, key: str) -> int:
+    if key == query:
+        return 100
+    if key.startswith(query + " ") or query in key.split():
+        return 90                                    # «telegram» → «telegram desktop»
+    if key.startswith(query):
+        return 80
+    if f" {query}" in f" {key}":
+        return 75
+    if query in key:
+        return 60
+    ratio = difflib.SequenceMatcher(None, query, key).ratio()
+    return int(ratio * 55) if ratio >= 0.62 else 0   # «cloud» → «claude»
+
+
+_TRANSLIT = str.maketrans({
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e", "ж": "zh", "з": "z",
+    "и": "i", "й": "y", "к": "k", "л": "l", "м": "m", "н": "n", "о": "o", "п": "p", "р": "r",
+    "с": "s", "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "c", "ч": "ch", "ш": "sh", "щ": "sch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+})
+
+
+def _forms(text: str) -> set:
+    """Как сказано, по синониму и латиницей: «клод» → claude, «кодблокс» → codeblocks."""
+    text = text.strip().lower()
+    return {text, ALIASES.get(text, text), text.translate(_TRANSLIT)} - {""}
+
+
+def find_app(name: str):
+    """(запись, название) лучшего совпадения или (None, запрос).
+
+    Сначала ищется сказанное целиком, и побеждает лучшее совпадение — так
+    «калькулятор» находит Калькулятор Windows, а не LibreOffice Calc по синониму
+    «calc». Если целиком не нашлось, разбираем фразу на слова: на показе
+    02.10.2026 «открой текстовый документ в блокнот» осталось без ответа, хотя
+    нужное слово в ней было. По отдельным словам берём только уверенные
+    совпадения, иначе «открой мне что-нибудь» наугад запустит первое похожее.
+    """
+    raw = name.strip().lower()
+    whole = _forms(raw)
+    words = [w for w in re.findall(r"[\w-]+", raw) if len(w) >= 3 and w not in NOT_NAMES]
+    pieces = set()
+    for i in range(len(words)):
+        for n in (2, 1):                      # «визуал студио», затем «блокнот»
+            frag = " ".join(words[i:i + n])
+            if frag and frag != raw:
+                pieces |= _forms(frag)
+    pieces -= whole
+
+    def best(index):
+        scored = [(_score(v, key), -len(key), key) for v in whole for key in index]
+        scored += [(s, ln, key) for s, ln, key in
+                   ((_score(v, key), -len(key), key) for v in pieces for key in index)
+                   if s >= 75]                # по слову — только точное, не похожее
+        scored = [s for s in scored if s[0] > 0]
+        if not scored:
+            return None
+        return index[max(scored)[2]]
+
+    entry = best(build_app_index())
+    if entry is None and CACHE.exists() and time.time() - CACHE.stat().st_mtime > 60:
+        entry = best(build_app_index(force=True))   # поставили недавно — обновим список сами
+    return (entry, entry["name"]) if entry else (None, ALIASES.get(raw, raw))
+
+
+def _launch(entry: dict):
+    if entry.get("aumid"):
+        # Через AppsFolder открывается что угодно: и Store-приложения, и обычные
+        subprocess.Popen(["explorer.exe", "shell:AppsFolder\\" + entry["aumid"]])
+    else:
+        os.startfile(entry["lnk"])
+
+
+def open_app(name: str) -> str:
+    entry, display = find_app(name)
+    if entry:
+        try:
+            _launch(entry)
+            return f"Открываю {display}."
+        except Exception as e:
+            return f"Не смог открыть {display}: {e}"
+    query = display
+    if shutil.which(query):                          # системные: notepad, calc, cmd
+        os.startfile(shutil.which(query))
+        return f"Открываю {query}."
+    low = name.strip().lower()
+    if low in SITES:
+        return open_site(low)
+    if query in SITE_FALLBACK:
+        webbrowser.open(SITE_FALLBACK[query])
+        return f"Программы {name} на компьютере нет — открыл сайт."
+    return f"Не нашёл программу «{name}» среди установленных."
+
+
+def open_site(what: str) -> str:
+    url = SITES.get(what.strip().lower())
+    if not url:
+        w = what.strip()
+        if w.startswith("http"):
+            url = w
+        elif "." in w and " " not in w:
+            url = "https://" + w
+        else:
+            url = "https://www.google.com/search?q=" + w
+    webbrowser.open(url)
+    return f"Открываю {what}."
+
+
+def search_web(query: str) -> str:
+    webbrowser.open("https://www.google.com/search?q=" + query)
+    return f"Ищу: {query}"
+
+
+def is_cloaked(hwnd) -> bool:
+    """Окно «спит»: Windows числит его видимым, но на экране его нет.
+
+    Так ведут себя приложения из Store после сворачивания — Калькулятор,
+    Параметры, «Microsoft Text Input Application». Без этой проверки Джарвис
+    перечислял их в «что открыто» и считал запущенными.
+    """
+    value = ctypes.c_int(0)
+    try:
+        ctypes.windll.dwmapi.DwmGetWindowAttribute(hwnd, 14, ctypes.byref(value),
+                                                   ctypes.sizeof(value))   # DWMWA_CLOAKED
+    except Exception:
+        return False
+    return value.value != 0
+
+
+def _visible_windows():
+    """(hwnd, заголовок, имя процесса без .exe, pid) всех видимых окон верхнего уровня."""
+    import win32gui
+    import win32process
+    out = []
+
+    def cb(hwnd, _):
+        if not win32gui.IsWindowVisible(hwnd) or win32gui.GetWindow(hwnd, 4):   # 4 = владелец
+            return
+        if is_cloaked(hwnd):
+            return
+        title = win32gui.GetWindowText(hwnd)
+        if not title or title == "Program Manager":                             # сам рабочий стол
+            return
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            pname = psutil.Process(pid).name().lower().removesuffix(".exe")
+        except Exception:
+            return
+        out.append((hwnd, title, pname, pid))
+
+    win32gui.EnumWindows(cb, None)
+    return out
+
+
+def close_app(name: str) -> str:
+    """Закрыть программу — как крестиком, чтобы она успела предложить сохранить.
+
+    Раньше процесс просто убивался: несохранённое пропадало молча. И искался
+    только по имени процесса, поэтому «Visual Studio Code» не закрывался —
+    его процесс называется Code.exe (так вышло на живом тесте).
+
+    Порядок: сначала по имени процесса (из ярлыка программы или прямо по
+    названию), по заголовку окна — только если процесс не нашёлся: иначе
+    «закрой telegram» закрыл бы и браузер со вкладкой «Telegram Web».
+    """
+    import win32con
+    import win32gui
+
+    entry, display = find_app(name)
+    raw = name.strip().lower()
+    query = ALIASES.get(raw, raw)
+    # Заголовок окна сравнивается со всеми вариантами названия: у Store-приложений
+    # окно держит ApplicationFrameHost, и по процессу его не найти — только по
+    # заголовку «Калькулятор», который с синонимом «calc» не совпал бы
+    titles = {raw, query} | ({entry["name"].lower()} if entry else set())
+    titles = {t for t in titles if len(t) >= 4}
+    procs = {query.replace(" ", ""), query.split()[0]}
+    if entry:
+        low = entry["name"].lower()
+        procs |= {low.replace(" ", ""), low.split()[0]}
+        if entry.get("exe"):
+            procs.add(entry["exe"])
+        if low in PROCESS_NAMES:
+            procs.add(PROCESS_NAMES[low])
+    if query in PROCESS_NAMES:
+        procs.add(PROCESS_NAMES[query])
+    procs = {p for p in procs if len(p) >= 3}
+    shell = {"explorer", "dwm", "python", "pythonw", "powershell", "cmd", "conhost"}
+
+    windows = _visible_windows()
+    by_process = [w for w in windows if w[2] in procs and w[2] not in shell]
+    targets = by_process or [w for w in windows
+                             if any(t in w[1].lower() for t in titles) and w[2] not in shell]
+    if not targets:
+        # Окон нет, но процесс может жить в трее
+        tray = [p for p in psutil.process_iter(["name"])
+                if (p.info["name"] or "").lower().removesuffix(".exe") in procs
+                and (p.info["name"] or "").lower().removesuffix(".exe") not in shell]
+        if not tray:
+            return f"Не нашёл запущенную программу «{name}»."
+        for p in tray:
+            try:
+                p.terminate()
+            except Exception:
+                pass
+        return f"Закрыл {display}: окна у него не было, работал в фоне."
+
+    for hwnd, *_ in targets:
+        try:
+            win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+        except Exception:
+            pass
+    time.sleep(1.5)
+    still = [w for w in _visible_windows() if w[0] in {t[0] for t in targets}]
+    if still:
+        return (f"Попросил {display} закрыться, но окно ещё открыто — наверное, программа "
+                "спрашивает, сохранить ли изменения.")
+    return f"Закрыл {display}."
+
+
+# ---------------- звук ----------------
+def _volume_iface():
+    """Свежий pycaw отдаёт готовый EndpointVolume; на старом — активируем вручную."""
+    from pycaw.utils import AudioUtilities
+    dev = AudioUtilities.GetSpeakers()
+    if hasattr(dev, "EndpointVolume"):
+        return dev.EndpointVolume
+    from ctypes import cast, POINTER
+    from comtypes import CLSCTX_ALL
+    from pycaw.api.endpointvolume import IAudioEndpointVolume
+    iface = dev.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    return cast(iface, POINTER(IAudioEndpointVolume))
+
+
+def set_volume(percent: int) -> str:
+    percent = max(0, min(100, int(percent)))
+    try:
+        _volume_iface().SetMasterVolumeLevelScalar(percent / 100, None)
+        return f"Громкость {percent} процентов."
+    except Exception as e:
+        return f"Не вышло со звуком: {e}"
+
+
+def get_volume() -> str:
+    try:
+        return f"Громкость {round(_volume_iface().GetMasterVolumeLevelScalar()*100)} процентов."
+    except Exception as e:
+        return f"Не вышло: {e}"
+
+
+def change_volume(delta: int) -> str:
+    try:
+        cur = _volume_iface().GetMasterVolumeLevelScalar() * 100
+        return set_volume(int(cur + delta))
+    except Exception as e:
+        return f"Не вышло: {e}"
+
+
+def mute(state: bool = True) -> str:
+    try:
+        _volume_iface().SetMute(1 if state else 0, None)
+        return "Звук выключен." if state else "Звук включён."
+    except Exception as e:
+        return f"Не вышло: {e}"
+
+
+def audio_activity(settle: float = 0.25) -> dict:
+    """Кто сейчас звучит: {имя процесса: громкость от 0 до 1}.
+
+    Windows ведёт счётчик громкости по каждому приложению, и это единственный
+    способ проверить, играет ли на самом деле видео в браузере. На показе
+    05.10.2026 Джарвис трижды отчитался «видео остановлено», пока оно играло:
+    он нажимал клавишу и верил, что сработало. Теперь он может послушать.
+
+    Мгновенное значение скачет (в тишине между словами ноль), поэтому берём
+    максимум за четверть секунды.
+    """
+    from ctypes import POINTER, cast
+    from pycaw.pycaw import AudioUtilities, IAudioMeterInformation
+    loud = {}
+    deadline = time.time() + settle
+    while True:
+        for s in AudioUtilities.GetAllSessions():
+            if not s.Process or s.State != 1:          # 1 = сессия активна
+                continue
+            try:
+                meter = cast(s._ctl.QueryInterface(IAudioMeterInformation),
+                             POINTER(IAudioMeterInformation))
+                name = s.Process.name().lower().removesuffix(".exe")
+                loud[name] = max(loud.get(name, 0.0), float(meter.GetPeakValue()))
+            except Exception:
+                continue
+        if time.time() >= deadline:
+            return loud
+        time.sleep(0.05)
+
+
+def sound_level(hint: str = "") -> float:
+    """Громкость конкретного приложения (или самая громкая из всех)."""
+    loud = audio_activity()
+    if not loud:
+        return 0.0
+    if hint:
+        hint = hint.lower().removesuffix(".exe")
+        return max((v for k, v in loud.items() if hint in k or k in hint), default=0.0)
+    return max(loud.values())
+
+
+def who_sounds() -> str:
+    """Человеческий ответ на «что сейчас играет» — по звуку, а не по догадке."""
+    loud = {k: v for k, v in audio_activity().items() if v > 0.001}
+    mine = {"python", "pythonw"}                       # свой же голос не считаем
+    loud = {k: v for k, v in loud.items() if k not in mine}
+    if not loud:
+        return "Тихо, ничего не звучит."
+    top = sorted(loud.items(), key=lambda kv: -kv[1])
+    return "Звук идёт из: " + ", ".join(name for name, _ in top[:3]) + "."
+
+
+def media_key(key: str) -> str:
+    """Управление любым плеером: пауза, следующий трек и т.д.
+
+    Отчёт честный: клавиша глобальная, и её может не принять никто (браузер
+    забирает её только когда играет). Поэтому сравниваем звук до и после.
+    """
+    import win32api
+    import win32con
+    codes = {"play": 0xB3, "pause": 0xB3, "next": 0xB0, "prev": 0xB1, "stop": 0xB2}
+    vk = codes.get(key)
+    if not vk:
+        return "Не знаю такую команду плеера."
+    before = sound_level()
+    win32api.keybd_event(vk, 0, 0, 0)
+    win32api.keybd_event(vk, 0, win32con.KEYEVENTF_KEYUP, 0)
+    time.sleep(0.6)
+    after = sound_level()
+    done = {"play": "Играю.", "pause": "Пауза.", "next": "Следующий.",
+            "prev": "Предыдущий.", "stop": "Остановил."}[key]
+    if key in ("pause", "stop"):
+        if before <= 0.001:
+            return "Ничего и не звучало."
+        if after > 0.001:
+            return ("Нажал клавишу паузы, но звук идёт дальше — плеер её не принял. "
+                    "Для видео в браузере нужен инструмент video.")
+    return done
+
+
+# ---------------- система ----------------
+def system_info() -> str:
+    cpu = psutil.cpu_percent(interval=0.4)
+    mem = psutil.virtual_memory()
+    parts = [f"Процессор загружен на {cpu:.0f} процентов",
+             f"памяти занято {mem.percent:.0f} процентов"]
+    for d in psutil.disk_partitions():
+        if "cdrom" in d.opts or not d.fstype:
+            continue
+        try:
+            u = psutil.disk_usage(d.mountpoint)
+            parts.append(f"на диске {d.device[0]} свободно {u.free/2**30:.0f} гигабайт")
+        except Exception:
+            pass
+    return ", ".join(parts) + "."
+
+
+def battery() -> str:
+    b = psutil.sensors_battery()
+    if not b:
+        return "Батареи нет — это стационарный компьютер."
+    return f"Заряд {b.percent} процентов" + (", от сети." if b.power_plugged else ".")
+
+
+def top_processes(n: int = 5) -> str:
+    procs = []
+    for p in psutil.process_iter(["name", "memory_info"]):
+        try:
+            procs.append((p.info["name"], p.info["memory_info"].rss))
+        except Exception:
+            pass
+    procs.sort(key=lambda x: -x[1])
+    top = [f"{nm} — {m/2**20:.0f} мегабайт" for nm, m in procs[:n]]
+    return "Больше всего памяти едят: " + ", ".join(top) + "."
+
+
+def screenshot() -> str:
+    """Скриншот всех экранов. Путь возвращается — его же читает зрение Джарвиса."""
+    from PIL import ImageGrab
+    out = Path.home() / "Pictures" / f"jarvis_{datetime.now():%Y%m%d_%H%M%S}.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    ImageGrab.grab(all_screens=True).save(out)
+    return str(out)
+
+
+def lock_screen() -> str:
+    ctypes.windll.user32.LockWorkStation()
+    return "Блокирую."
+
+
+def shutdown(minutes: int = 0) -> str:
+    subprocess.run(["shutdown", "/s", "/t", str(int(minutes) * 60)], capture_output=True)
+    return f"Выключаю компьютер через {minutes} минут." if minutes else "Выключаю компьютер."
+
+
+def reboot() -> str:
+    subprocess.run(["shutdown", "/r", "/t", "0"], capture_output=True)
+    return "Перезагружаю."
+
+
+def cancel_shutdown() -> str:
+    subprocess.run(["shutdown", "/a"], capture_output=True)
+    return "Выключение отменено."
+
+
+def sleep_pc() -> str:
+    subprocess.run(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"], capture_output=True)
+    return "Ухожу в сон."
+
+
+def clipboard_get() -> str:
+    import win32clipboard
+    try:
+        win32clipboard.OpenClipboard()
+        data = win32clipboard.GetClipboardData()
+        win32clipboard.CloseClipboard()
+        return data
+    except Exception:
+        return ""
+
+
+def clipboard_set(text: str) -> str:
+    import win32clipboard
+    win32clipboard.OpenClipboard()
+    win32clipboard.EmptyClipboard()
+    win32clipboard.SetClipboardText(text)
+    win32clipboard.CloseClipboard()
+    return "Скопировал в буфер."
+
+
+def find_file(pattern: str, where: str = None, limit: int = 8) -> str:
+    roots = [Path(where)] if where else [
+        Path.home() / "Desktop", Path.home() / "Documents", Path.home() / "Downloads",
+    ]
+    hits = []
+    for r in roots:
+        if not r.exists():
+            continue
+        try:
+            for p in r.rglob(f"*{pattern}*"):
+                hits.append(p)
+                if len(hits) >= limit:
+                    break
+        except Exception:
+            pass
+        if len(hits) >= limit:
+            break
+    if not hits:
+        return f"Ничего не нашёл по запросу «{pattern}»."
+    return f"Нашёл {len(hits)}: " + ", ".join(h.name for h in hits[:5])
+
+
+def what_time() -> str:
+    now = datetime.now()
+    days = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
+    months = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+              "августа", "сентября", "октября", "ноября", "декабря"]
+    def form(n, one, few, many):
+        if n % 10 == 1 and n % 100 != 11:
+            return one
+        if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+            return few
+        return many
+
+    # «2 часа 43 минуты», а не «2 часов 43 минут»
+    return (f"Сейчас {now.hour} {form(now.hour, 'час', 'часа', 'часов')} "
+            f"{now.minute} {form(now.minute, 'минута', 'минуты', 'минут')}, "
+            f"{days[now.weekday()]}, {now.day} {months[now.month-1]}.")
+
+
+if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from core import config
+    config.setup_console()
+    idx = build_app_index(force=True)
+    print(f"Проиндексировано программ: {len(idx)}")
+    print("Примеры:", ", ".join(list(idx)[:14]))
+    print(what_time())
+    print(system_info())
+    print(get_volume())

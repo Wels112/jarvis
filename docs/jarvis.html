@@ -1,0 +1,753 @@
+<title>Джарвис</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800&family=Onest:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #F5F3EF;
+    --surface:     #FFFFFF;
+    --surface-alt: #EDEAE3;
+    --ink:         #1A1D20;
+    --ink-soft:    #43484D;
+    --muted:       #6E747A;
+    --line:        #DBD6CC;
+    --accent:      #A9640F;
+    --accent-soft: #F0E2CC;
+    --local:       #24706A;
+    --local-soft:  #D6EAE6;
+    --warn:        #A8452F;
+    --warn-soft:   #F3DDD6;
+    --shadow:      0 1px 2px rgba(26,29,32,.06), 0 8px 24px rgba(26,29,32,.05);
+    --radius:      10px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #14181B;
+      --surface:     #1C2126;
+      --surface-alt: #232A30;
+      --ink:         #E9E6E0;
+      --ink-soft:    #BFC3C7;
+      --muted:       #8B9299;
+      --line:        #2E363D;
+      --accent:      #E2A044;
+      --accent-soft: #33291A;
+      --local:       #57B3A8;
+      --local-soft:  #17302E;
+      --warn:        #DD7357;
+      --warn-soft:   #351E18;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #14181B;
+    --surface:     #1C2126;
+    --surface-alt: #232A30;
+    --ink:         #E9E6E0;
+    --ink-soft:    #BFC3C7;
+    --muted:       #8B9299;
+    --line:        #2E363D;
+    --accent:      #E2A044;
+    --accent-soft: #33291A;
+    --local:       #57B3A8;
+    --local-soft:  #17302E;
+    --warn:        #DD7357;
+    --warn-soft:   #351E18;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.28);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Onest", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 940px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  /* ---------- шапка ---------- */
+  header {
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  h1 {
+    font-family: "Unbounded", "Onest", sans-serif;
+    font-weight: 800;
+    font-size: clamp(2.6rem, 8vw, 4.4rem);
+    line-height: .98;
+    letter-spacing: -.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .lede {
+    font-size: clamp(1.05rem, 2.2vw, 1.2rem);
+    color: var(--ink-soft);
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  /* ---------- строка состояния ---------- */
+  .status {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px 6px 10px;
+    border-radius: 100px;
+    font-size: 13.5px;
+    font-weight: 500;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink-soft);
+  }
+
+  .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex: none;
+  }
+  .dot.on   { background: var(--local); box-shadow: 0 0 0 3px var(--local-soft); }
+  .dot.wait { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  /* ---------- секции ---------- */
+  section { padding-top: 56px; }
+
+  h2 {
+    font-family: "Unbounded", "Onest", sans-serif;
+    font-weight: 600;
+    font-size: 1.45rem;
+    letter-spacing: -.01em;
+    margin: 0 0 6px;
+  }
+
+  .sub {
+    color: var(--muted);
+    margin: 0 0 24px;
+    max-width: 62ch;
+  }
+
+  /* ---------- два шага ---------- */
+  .steps {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 22px 22px 20px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .step-n {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: .1em;
+  }
+
+  .step h3 {
+    font-family: "Onest", sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .step p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+
+  .step code, .inline-code {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    background: var(--surface-alt);
+    padding: 2px 6px;
+    border-radius: 5px;
+    color: var(--ink);
+    word-break: break-all;
+  }
+
+  /* ---------- группы команд ---------- */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 14px 18px;
+    background: var(--surface-alt);
+    border-radius: var(--radius);
+    margin-bottom: 26px;
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+
+  .tag {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 5px;
+    flex: none;
+    white-space: nowrap;
+  }
+  .tag.local { background: var(--local-soft); color: var(--local); }
+  .tag.net   { background: var(--accent-soft); color: var(--accent); }
+  .tag.ask   { background: var(--warn-soft);  color: var(--warn); }
+
+  .groups {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  }
+
+  .group {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 20px 20px 8px;
+    box-shadow: var(--shadow);
+  }
+
+  .group h3 {
+    font-family: "Unbounded", sans-serif;
+    font-size: .95rem;
+    font-weight: 600;
+    margin: 0 0 14px;
+    letter-spacing: -.005em;
+  }
+
+  .cmd {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 6px 12px;
+    align-items: start;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+  }
+  .group .cmd:first-of-type { border-top: none; padding-top: 0; }
+
+  .say {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: var(--ink);
+    line-height: 1.5;
+  }
+  .say::before { content: "— "; color: var(--muted); }
+
+  .does {
+    grid-column: 1 / -1;
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  /* ---------- схема ---------- */
+  .flow {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    margin-bottom: 18px;
+  }
+
+  .lane {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    background: var(--surface);
+  }
+  .lane.first { border-left: 3px solid var(--local); }
+  .lane.second { border-left: 3px solid var(--accent); }
+
+  .lane h4 {
+    margin: 0 0 4px;
+    font-size: .95rem;
+    font-weight: 700;
+  }
+  .lane p { margin: 0; font-size: 14px; color: var(--ink-soft); }
+  .lane .metric {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    display: block;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- запуск ---------- */
+  .files {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14.5px;
+  }
+  .files td {
+    padding: 11px 0;
+    border-top: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .files tr:first-child td { border-top: none; }
+  .files td:first-child {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+    color: var(--accent);
+    white-space: nowrap;
+    padding-right: 20px;
+    width: 1%;
+  }
+  .files td:last-child { color: var(--ink-soft); }
+
+  .note {
+    margin-top: 40px;
+    padding: 20px 22px;
+    border-left: 3px solid var(--warn);
+    background: var(--surface);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+  .note p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+  .note strong { color: var(--ink); }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  @media (max-width: 560px) {
+    header { padding-top: 48px; }
+    .wrap { padding: 0 18px 64px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">D:\jarvis · собран и проверен</div>
+    <h1>Джарвис</h1>
+    <p class="lede">
+      Голосовой ассистент с полным доступом к компьютеру. Слышит по-русски через
+      твою гарнитуру, отвечает голосом, помнит сказанное между запусками
+      и ничего не удаляет и не отправляет, не спросив.
+    </p>
+    <div class="status">
+      <span class="chip"><span class="dot on"></span>Голос и слух — работают</span>
+      <span class="chip"><span class="dot on"></span>155 программ под голосом</span>
+      <span class="chip"><span class="dot on"></span>YouTube подключён</span>
+      <span class="chip"><span class="dot on"></span>Погода и таймеры</span>
+      <span class="chip"><span class="dot on"></span>Иконка в трее и клавиши</span>
+      <span class="chip"><span class="dot on"></span>Живой голос Silero</span>
+      <span class="chip"><span class="dot on"></span>Ученики и расписание</span>
+      <span class="chip"><span class="dot wait"></span>Gemini — ждёт ключ</span>
+      <span class="chip"><span class="dot wait"></span>Telegram — ждёт вход</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>Осталось два шага</h2>
+    <p class="sub">
+      Оба требуют входа в твои аккаунты, поэтому сделать их могу только ты.
+      Без них Джарвис уже работает — не будет лишь свободного разговора и чтения чатов.
+    </p>
+    <div class="steps">
+      <div class="step">
+        <span class="step-n">ШАГ 1</span>
+        <h3>Ключ Gemini — свободный разговор</h3>
+        <p>
+          Открой <span class="inline-code">aistudio.google.com/apikey</span>, нажми
+          Create API key, скопируй. Запусти <span class="inline-code">setup.bat</span>
+          и вставь в первое поле. Бесплатно, 1500 запросов в день.
+        </p>
+      </div>
+      <div class="step">
+        <span class="step-n">ШАГ 2</span>
+        <h3>Telegram — чтение и ответы</h3>
+        <p>
+          На <span class="inline-code">my.telegram.org</span> → API development tools
+          возьми api_id и api_hash, впиши там же в <span class="inline-code">setup.bat</span>.
+          Потом один раз выполни вход — код из приложения вводишь ты сам.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Что говорить</h2>
+    <p class="sub">
+      Скажи «Джарвис» — он ответит и следующие 30 секунд принимает команды подряд,
+      имя повторять не нужно. Он чинит частые ослышки распознавания и понимает числа словами — «громкость тридцать» и «громкость 30» идут по одному правилу. Себя узнаёт и как «джарвиз», «жарвес», «дарвис»:
+      распознавание речи путает эти звуки, и на каждый вариант он откликается одинаково.
+    </p>
+
+    <div class="legend">
+      <span><span class="tag local">офлайн</span> мгновенно, без интернета</span>
+      <span><span class="tag net">сеть</span> нужен интернет</span>
+      <span><span class="tag ask">спросит</span> сначала переспросит вслух</span>
+    </div>
+
+    <div class="groups">
+
+      <div class="group">
+        <h3>Программы и окна</h3>
+        <div class="cmd">
+          <span class="say">открой стим</span><span class="tag local">офлайн</span>
+          <span class="does">Запускает любую из 155 установленных программ — список берётся из меню «Пуск», а не прописан заранее</span>
+        </div>
+        <div class="cmd">
+          <span class="say">переключись на телеграм</span><span class="tag local">офлайн</span>
+          <span class="does">Выводит нужное окно вперёд</span>
+        </div>
+        <div class="cmd">
+          <span class="say">что открыто</span><span class="tag local">офлайн</span>
+          <span class="does">Перечисляет окна вслух</span>
+        </div>
+        <div class="cmd">
+          <span class="say">сверни всё</span><span class="tag local">офлайн</span>
+          <span class="does">Показывает рабочий стол</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Браузер</h3>
+        <div class="cmd">
+          <span class="say">новая вкладка</span><span class="tag local">офлайн</span>
+          <span class="does">Работает с уже открытым окном — со всеми твоими логинами, а не в чистом браузере</span>
+        </div>
+        <div class="cmd">
+          <span class="say">листай вниз</span><span class="tag local">офлайн</span>
+          <span class="does">Прокручивает страницу</span>
+        </div>
+        <div class="cmd">
+          <span class="say">найди на странице отчёт</span><span class="tag local">офлайн</span>
+          <span class="does">Поиск по открытой странице</span>
+        </div>
+        <div class="cmd">
+          <span class="say">назад · обнови страницу</span><span class="tag local">офлайн</span>
+          <span class="does">Навигация и перезагрузка</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Звук и музыка</h3>
+        <div class="cmd">
+          <span class="say">громкость 30</span><span class="tag local">офлайн</span>
+          <span class="does">Понимает и «погромче», «потише», «выключи звук»</span>
+        </div>
+        <div class="cmd">
+          <span class="say">пауза · следующий трек</span><span class="tag local">офлайн</span>
+          <span class="does">Управляет любым плеером — Яндекс Музыкой, браузером, чем угодно</span>
+        </div>
+        <div class="cmd">
+          <span class="say">включи на ютубе lofi hip hop</span><span class="tag net">сеть</span>
+          <span class="does">Находит и сразу запускает первое видео</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Второй мозг</h3>
+        <div class="cmd">
+          <span class="say">запомни что я работаю по ночам</span><span class="tag local">офлайн</span>
+          <span class="does">Помнит навсегда, между запусками и перезагрузками</span>
+        </div>
+        <div class="cmd">
+          <span class="say">что ты помнишь про работу</span><span class="tag local">офлайн</span>
+          <span class="does">Ищет по всему, что запоминал</span>
+        </div>
+        <div class="cmd">
+          <span class="say">заметка идея для ролика про нейросети</span><span class="tag local">офлайн</span>
+          <span class="does">Пишет в дневник, разложенный по датам</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>График и таймеры</h3>
+        <div class="cmd">
+          <span class="say">напомни позвонить маме завтра в 12</span><span class="tag local">офлайн</span>
+          <span class="does">Понимает «завтра в 15», «в пятницу», «через 20 минут», «10 сентября в 9:30»</span>
+        </div>
+        <div class="cmd">
+          <span class="say">поставь таймер на 10 минут</span><span class="tag local">офлайн</span>
+          <span class="does">Секунды, минуты, часы. «Сколько осталось» — скажет, сколько тикать</span>
+        </div>
+        <div class="cmd">
+          <span class="say">какие у меня задачи</span><span class="tag local">офлайн</span>
+          <span class="does">План на сегодня, завтра или неделю. Таймеры сюда не лезут</span>
+        </div>
+        <div class="cmd">
+          <span class="say">— (сам)</span><span class="tag local">офлайн</span>
+          <span class="does">Когда приходит время, напоминает вслух без всякой команды</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Погода</h3>
+        <div class="cmd">
+          <span class="say">какая погода</span><span class="tag net">сеть</span>
+          <span class="does">Температура, осадки, ветер и вилка на день — без ключа и регистрации</span>
+        </div>
+        <div class="cmd">
+          <span class="say">погода в питере</span><span class="tag net">сеть</span>
+          <span class="does">Понимает падежи и прозвища: «в питере», «в мск», «в ебурге»</span>
+        </div>
+        <div class="cmd">
+          <span class="say">погода</span><span class="tag net">сеть</span>
+          <span class="does">Город запоминается — назвал один раз, дальше можно просто «погода»</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Канал и переписка</h3>
+        <div class="cmd">
+          <span class="say">сколько у меня подписчиков</span><span class="tag net">сеть</span>
+          <span class="does">Статистика канала и просмотры последних роликов</span>
+        </div>
+        <div class="cmd">
+          <span class="say">что в телеграме</span><span class="tag net">сеть</span>
+          <span class="does">Читает непрочитанное и переписку с конкретным человеком</span>
+        </div>
+        <div class="cmd">
+          <span class="say">напиши Саше что буду поздно</span><span class="tag ask">спросит</span>
+          <span class="does">Зачитает получателя и текст и отправит только после твоего «да»</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Уроки и ученики</h3>
+        <div class="cmd">
+          <span class="say">добавь ученика Петя математика 1500</span><span class="tag local">офлайн</span>
+          <span class="does">Имя, предмет, ставка за занятие</span>
+        </div>
+        <div class="cmd">
+          <span class="say">поставь Петю на вторник в 16:00</span><span class="tag local">офлайн</span>
+          <span class="does">Регулярное занятие записывается один раз, а не двадцать дат на семестр</span>
+        </div>
+        <div class="cmd">
+          <span class="say">какие уроки сегодня</span><span class="tag local">офлайн</span>
+          <span class="does">Сегодня, завтра, на неделю. «Кто следующий» — сколько осталось до ближайшего</span>
+        </div>
+        <div class="cmd">
+          <span class="say">начали урок с Петей</span><span class="tag local">офлайн</span>
+          <span class="does">Таймер на длительность и предупреждение за пять минут до конца</span>
+        </div>
+        <div class="cmd">
+          <span class="say">урок закончен</span><span class="tag local">офлайн</span>
+          <span class="does">Закроет именно тот урок, который шёл, и запишет в заработок</span>
+        </div>
+        <div class="cmd">
+          <span class="say">запиши про Петю что плывёт в дробях</span><span class="tag local">офлайн</span>
+          <span class="does">Журнал по ученику: «что там с Петей» поднимет последнее за две секунды</span>
+        </div>
+        <div class="cmd">
+          <span class="say">сколько я заработал за неделю</span><span class="tag local">офлайн</span>
+          <span class="does">Считает только проведённые занятия — отменённые в деньги не идут</span>
+        </div>
+        <div class="cmd">
+          <span class="say">— (сам)</span><span class="tag local">офлайн</span>
+          <span class="does">За десять минут до занятия скажет вслух, что скоро урок</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Счёт, деньги, единицы</h3>
+        <div class="cmd">
+          <span class="say">сколько будет двести плюс сорок</span><span class="tag local">офлайн</span>
+          <span class="does">Числа словами тоже понимает. Считает своим разбором, а не eval — голосом можно надиктовать что угодно</span>
+        </div>
+        <div class="cmd">
+          <span class="say">15 процентов от 2000</span><span class="tag local">офлайн</span>
+          <span class="does">Проценты, корень, степень</span>
+        </div>
+        <div class="cmd">
+          <span class="say">курс доллара</span><span class="tag net">сеть</span>
+          <span class="does">Отвечает «восемьдесят шесть рублей восемь копеек», а не «86.08 RUB»</span>
+        </div>
+        <div class="cmd">
+          <span class="say">переведи 100 долларов в рубли</span><span class="tag net">сеть</span>
+          <span class="does">Падежи валют понимает: доллара, долларов, рубли</span>
+        </div>
+        <div class="cmd">
+          <span class="say">переведи 5 км в метры</span><span class="tag local">офлайн</span>
+          <span class="does">Длина, вес, время, гигабайты, градусы</span>
+        </div>
+        <div class="cmd">
+          <span class="say">разбуди в 7 утра</span><span class="tag local">офлайн</span>
+          <span class="does">Если семь уже прошло — поставит на завтра</span>
+        </div>
+        <div class="cmd">
+          <span class="say">переведи на английский привет как дела</span><span class="tag net">сеть</span>
+          <span class="does">Восемь языков, без ключей</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Место на диске</h3>
+        <div class="cmd">
+          <span class="say">сколько свободного места</span><span class="tag local">офлайн</span>
+          <span class="does">По обоим дискам сразу</span>
+        </div>
+        <div class="cmd">
+          <span class="say">что можно почистить</span><span class="tag local">офлайн</span>
+          <span class="does">Считает мусор, ничего не удаляя</span>
+        </div>
+        <div class="cmd">
+          <span class="say">почисти диск</span><span class="tag ask">спросит</span>
+          <span class="does">Только кэши и временные файлы, которые система пересоздаёт сама. Документы, загрузки и корзину не трогает никогда</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Система</h3>
+        <div class="cmd">
+          <span class="say">статус системы</span><span class="tag local">офлайн</span>
+          <span class="does">Процессор, память, свободное место на дисках</span>
+        </div>
+        <div class="cmd">
+          <span class="say">что жрёт память</span><span class="tag local">офлайн</span>
+          <span class="does">Самые тяжёлые процессы</span>
+        </div>
+        <div class="cmd">
+          <span class="say">скриншот · заблокируй экран</span><span class="tag local">офлайн</span>
+          <span class="does">Снимок сохраняется в «Изображения»</span>
+        </div>
+        <div class="cmd">
+          <span class="say">выключи компьютер</span><span class="tag ask">спросит</span>
+          <span class="does">Переспросит вслух, прежде чем выключить</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Свободный разговор</h3>
+        <div class="cmd">
+          <span class="say">посмотри что у меня на экране</span><span class="tag net">сеть</span>
+          <span class="does">Делает скриншот и рассказывает, что видит</span>
+        </div>
+        <div class="cmd">
+          <span class="say">найди папку с отчётами и открой последний</span><span class="tag net">сеть</span>
+          <span class="does">Любая просьба не из списка уходит модели, а она уже сама вызывает нужные инструменты — их у неё 52</span>
+        </div>
+        <div class="cmd">
+          <span class="say">стоп</span><span class="tag local">офлайн</span>
+          <span class="does">Замолкает на полуслове</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Как он устроен</h2>
+    <p class="sub">
+      Услышанное проходит два эшелона. Это главное решение всей конструкции:
+      бытовые команды не должны зависеть от интернета и жечь лимит запросов.
+    </p>
+    <div class="flow">
+      <div class="lane first">
+        <h4>1. Правила</h4>
+        <p>«Громкость 30», «открой стим», «какие задачи» — разбираются на месте, без сети и без затрат. Сюда попадает почти всё повседневное.</p>
+        <span class="metric">ответ мгновенный · работает офлайн</span>
+      </div>
+      <div class="lane second">
+        <h4>2. Модель</h4>
+        <p>Всё, что правила не поняли, уходит в Gemini — вместе с памятью о тебе и 52 инструментами, которыми она управляет компьютером.</p>
+        <span class="metric">≈2 секунды · бесплатный тариф</span>
+      </div>
+    </div>
+    <p class="sub" style="margin-bottom:0">
+      Распознавание речи и голос — полностью локальные: Whisper слушает, Windows-голос
+      Ирины отвечает. Ничего не платится, микрофон никуда не транслируется.
+    </p>
+  </section>
+
+  <section>
+    <h2>Голос</h2>
+    <p class="sub">
+      Говорит нейросетевым голосом Silero — звучит как живой человек, а не как
+      автоответчик. Работает локально и бесплатно: синтезирует в шесть-семь раз
+      быстрее реального времени, поэтому паузы почти не слышно.
+      Голос меняется в настройках: <span class="inline-code">aidar</span> и
+      <span class="inline-code">eugene</span> мужские,
+      <span class="inline-code">baya</span>, <span class="inline-code">kseniya</span>,
+      <span class="inline-code">xenia</span> женские.
+      Если модель почему-то не поднимется, Джарвис сам переключится на встроенную
+      в Windows Ирину — не упадёт, просто зазвучит механически.
+    </p>
+  </section>
+
+  <section>
+    <h2>Клавиши и трей</h2>
+    <p class="sub">
+      Джарвис живёт иконкой-микрофоном рядом с часами: бирюзовая — слушает,
+      янтарная — думает, серая — на паузе. Правый клик открывает меню.
+      Клавиши нужны, когда говорить нельзя — рядом спят, идёт запись, ты на созвоне.
+    </p>
+    <table class="files">
+      <tr><td>Ctrl+Alt+J</td><td>Позвать молча — имя произносить не нужно, ответит «Да?»</td></tr>
+      <tr><td>Ctrl+Alt+S</td><td>Немедленно замолчать</td></tr>
+      <tr><td>Ctrl+Alt+P</td><td>Пауза и обратно</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Запуск</h2>
+    <table class="files">
+      <tr><td>jarvis.bat</td><td>Голосовой режим — основной. Слушает постоянно, ждёт обращения по имени</td></tr>
+      <tr><td>Джарвис-текстом.bat</td><td>То же самое, но команды набираются руками — удобно проверять</td></tr>
+      <tr><td>setup.bat</td><td>Вписать ключи и проверить, что работает, а что нет</td></tr>
+      <tr><td>автозапуск.bat</td><td>Включить старт вместе с Windows. Там же и выключается</td></tr>
+    </table>
+
+    <div class="note">
+      <p>
+        <strong>Про предохранители.</strong> Выключение компьютера, удаление файлов и любая
+        отправка сообщений наружу сначала проговариваются вслух и ждут твоего «да».
+        Одна ослышка не должна отправить постороннему случайную фразу или снести папку.
+        Режим переключается в <span class="inline-code">config/settings.json</span>.
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <span>Собран 3 сентября 2026 · расходы: ноль</span>
+    <span>Голосовой тракт проверен сквозным тестом: 7 из 7</span>
+  </footer>
+
+</div>

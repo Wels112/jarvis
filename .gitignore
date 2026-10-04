@@ -1,0 +1,41 @@
+# Личное и секретное — ничего из этого в репозиторий не попадает.
+#
+# Правило простое: в GitHub уезжает только код. Ключи, память, записи голоса
+# и журналы остаются на машине. Один раз выложенный ключ считается
+# скомпрометированным навсегда, даже если удалить его следующим коммитом.
+
+# --- ключи и настройки машины ---
+config/.env
+config/settings.json
+config/client_secret.json
+config/*.session
+*.session
+*.session-journal
+
+# --- второй мозг: факты о хозяине, заметки, дела, ученики ---
+data/brain/
+data/lessons*.json
+data/students*.json
+data/corrections.json
+data/city.txt
+data/geo_cache.json
+
+# --- записи голоса и журналы разговоров ---
+data/logs/
+data/fixtures/
+data/voice_samples/
+data/tts_test/
+data/wake_test/
+data/apps_index*.json
+
+# --- тяжёлое: скачивается установщиком ---
+models/
+.venv/
+
+# --- служебное ---
+__pycache__/
+*.py[cod]
+*.bak
+.pytest_cache/
+.idea/
+.vscode/
