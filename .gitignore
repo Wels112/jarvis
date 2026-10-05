@@ -48,3 +48,6 @@ train/data/run.log
 train/data/phrases.jsonl
 train/data/labeled.jsonl
 train/data/honesty.jsonl
+
+# --- настройки Claude Code для разработки (в т.ч. из ECC): только у себя ---
+.claude/
