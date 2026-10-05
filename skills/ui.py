@@ -33,7 +33,10 @@ _local = threading.local()           # COM-объекты привязаны к 
 DANGER = re.compile(
     r"отправ|удал|стере|оплат|купи|покуп|заказ|подтверд|опублик|выйти|выход\b|формат|сброс|"
     r"очист\w* все|send|delete|remove|erase|\bpay\b|buy|purchase|checkout|order|confirm|"
-    r"publish|post\b|sign ?out|log ?out|reset|format", re.I)
+    r"publish|post\b|sign ?out|log ?out|reset|format|"
+    # Выбросить несохранённое — тоже безвозвратно. Нашлось на деле 05.10.2026:
+    # «Не сохранять» в Блокноте нажималось без вопроса
+    r"не сохран|don'?t save|discard|отбросить|без сохранения", re.I)
 
 # Кнопки заголовка окна: есть в каждом окне и забивали список «что можно нажать»
 CHROME = re.compile(r"^(свернуть|развернуть|восстановить|закрыть)\b|^система$|"
@@ -231,6 +234,88 @@ def _invoke(el, hwnd_title: str = "") -> bool:
         return True
     except Exception:
         return False
+
+
+def _document_text(root, cap: int) -> str:
+    """Видимый текст страницы в браузере: документ с текстовым шаблоном."""
+    u = _uia()
+    iuia, U = u.iuia, u.UIA_dll
+    doc = root.FindFirst(U.TreeScope_Descendants, iuia.CreatePropertyCondition(
+        U.UIA_ControlTypePropertyId, U.UIA_DocumentControlTypeId))
+    pat = doc.GetCurrentPattern(U.UIA_TextPatternId) if doc else None
+    if not pat:
+        return ""
+    tp = pat.QueryInterface(U.IUIAutomationTextPattern)
+    # Текст от левого верхнего угла документа до правого нижнего — два лёгких
+    # запроса. Через GetVisibleRanges браузер сам считал, что видно, и это
+    # занимало 2,8 с; по двум точкам — 0,02 с (замер 05.10.2026)
+    try:
+        from ctypes.wintypes import POINT
+        r = doc.CurrentBoundingRectangle
+        span = tp.RangeFromPoint(POINT(r.left + 8, r.top + 8))
+        span.MoveEndpointByRange(1, tp.RangeFromPoint(POINT(r.right - 30, r.bottom - 8)), 1)
+        text = span.GetText(cap)
+        if text.strip():
+            return text.replace("￼", " ")
+    except Exception:
+        pass
+    # Запасной путь — по видимым кускам. Сбойный кусок (встроенная картинка)
+    # пропускаем: раньше один такой молча выбрасывал весь текст страницы
+    ranges = tp.GetVisibleRanges()
+    pieces = []
+    for i in range(min(ranges.Length, 400)):
+        try:
+            pieces.append(ranges.GetElement(i).GetText(2000))
+        except Exception:
+            continue
+    return " ".join(pieces).replace("￼", " ")
+
+
+def read_text(window: str = "", limit: int = 3000) -> str:
+    """Что написано в окне — без снимка экрана и без интернета.
+
+    look_at_screen отправляет снимок в облако: нужен интернет и несколько
+    секунд. А дерево элементов отдаёт сам текст. У браузера — видимую часть
+    страницы (то, что сейчас на экране), у обычных программ — подписи и поля.
+    Так «что тут написано» работает и у своей модели без сети.
+    """
+    hwnd, title = _target_window(window)
+    if not hwnd:
+        return f"Не нашёл окно «{window}»." if window else "Не вижу активного окна."
+    u = _uia()
+    iuia, U = u.iuia, u.UIA_dll
+    root = iuia.ElementFromHandle(hwnd)
+    try:
+        text = _document_text(root, limit * 3)
+    except Exception:
+        text = ""
+    if not text.strip():
+        # Обычная программа: подписи и содержимое полей на экране
+        req = iuia.CreateCacheRequest()
+        for prop in (U.UIA_NamePropertyId, U.UIA_IsOffscreenPropertyId,
+                     U.UIA_ValueValuePropertyId):
+            req.AddProperty(prop)
+        cond = iuia.CreateOrConditionFromArray([iuia.CreatePropertyCondition(
+            U.UIA_ControlTypePropertyId, ct) for ct in (U.UIA_TextControlTypeId,
+                                                        U.UIA_EditControlTypeId,
+                                                        U.UIA_DocumentControlTypeId)])
+        found = root.FindAllBuildCache(U.TreeScope_Descendants, cond, req)
+        seen, parts = set(), []
+        for i in range(min(found.Length, 400)):
+            el = found.GetElement(i)
+            if el.CachedIsOffscreen:
+                continue
+            for piece in (el.CachedName, el.GetCachedPropertyValue(U.UIA_ValueValuePropertyId)):
+                piece = (piece or "").strip() if isinstance(piece, str) else ""
+                if piece and piece not in seen:
+                    seen.add(piece)
+                    parts.append(piece)
+        text = " · ".join(parts)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return f"В окне «{title[:40]}» не нашёл текста."
+    cut = text[:limit] + ("…" if len(text) > limit else "")
+    return f"В окне «{title[:40]}» написано: {cut}"
 
 
 def is_dangerous(name: str) -> bool:

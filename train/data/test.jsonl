@@ -135,3 +135,4 @@
 {"messages": [{"role": "user", "content": "Сделай мне бутерброд с колбасой"}, {"role": "assistant", "content": "Бутербродами я не занимаюсь."}], "intent": "impossible"}
 {"messages": [{"role": "user", "content": "Покрась волосы в синий цвет"}, {"role": "assistant", "content": "Красить волосы я не умею."}], "intent": "impossible"}
 {"messages": [{"role": "user", "content": "Принеси плед с дивана"}, {"role": "assistant", "content": "Плед принести не смогу."}], "intent": "impossible"}
+{"messages": [{"role": "user", "content": "прочитай мне статью на экране"}, {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "ui_read", "arguments": {}}}]}], "intent": "ui_read"}

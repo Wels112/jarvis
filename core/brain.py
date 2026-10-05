@@ -536,6 +536,11 @@ def _t_ui_elements(b, window: str = ""):
     return UI.elements_report(window)
 
 
+def _t_ui_read(b, window: str = ""):
+    from skills import ui as UI
+    return UI.read_text(window)
+
+
 def _t_ui_click(b, name: str, window: str = ""):
     """Нажать по названию. Кнопки «отправить», «удалить», «оплатить» — через «да»."""
     from skills import ui as UI
@@ -573,7 +578,7 @@ def _t_tg_open(b, chat: str):
 TOOL_IMPL.update({
     "windows": _t_windows, "focus_window": _t_focus_window, "browser": _t_browser,
     "video": _t_video, "who_sounds": _t_who_sounds,
-    "ui_elements": _t_ui_elements, "ui_click": _t_ui_click,
+    "ui_elements": _t_ui_elements, "ui_click": _t_ui_click, "ui_read": _t_ui_read,
     "type_text": _t_type_text, "youtube_stats": _t_youtube_stats,
     "youtube_latest": _t_youtube_latest, "youtube_play": _t_youtube_play,
     "youtube_search": _t_youtube_search, "telegram_unread": _t_tg_unread,
@@ -635,6 +640,11 @@ TOOLS += [
     {"name": "ui_elements",
      "description": ("Что можно нажать в окне: кнопки, меню, ссылки, вкладки, поля — по названиям. "
                      "Это «глаза» без камеры: работает без интернета и быстрее look_at_screen"),
+     "parameters": _p(window={"type": "string", "description": "часть заголовка окна, необязательно"})},
+    {"name": "ui_read",
+     "description": ("Прочитать текст в окне: видимую часть страницы в браузере, текст в блокноте, "
+                     "подписи в программе. Для «что тут написано», «прочитай», «о чём статья». "
+                     "Без интернета и мгновенно; look_at_screen — только если важны картинки"),
      "parameters": _p(window={"type": "string", "description": "часть заголовка окна, необязательно"})},
     {"name": "telegram_unread", "description": "Непрочитанные сообщения в Telegram", "parameters": _p()},
     {"name": "telegram_read", "description": "Прочитать переписку с человеком",

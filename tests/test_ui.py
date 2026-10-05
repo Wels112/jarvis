@@ -73,8 +73,16 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} несуществующее — честный отказ: {said}")
 
+    t0 = time.monotonic()
+    read = UI.read_text("калькулятор")
+    took = time.monotonic() - t0
+    ok = "9" in read and took < 1.5
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} прочитать окно за {took:.2f} c: {read[:90]}…")
+
     for name, want in (("Удаление предыдущего символа", True), ("Отправить", True),
-                       ("Оплатить заказ", True), ("Семь", False), ("Сохранить", False)):
+                       ("Оплатить заказ", True), ("Не сохранять", True), ("Don't Save", True),
+                       ("Семь", False), ("Сохранить", False)):
         got = UI.is_dangerous(name)
         errors += got != want
         print(f"{'ok ' if got == want else 'НЕТ'} «{name}» — {'спросит подтверждение' if got else 'нажмёт сразу'}")
