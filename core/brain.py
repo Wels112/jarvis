@@ -123,6 +123,7 @@ class Brain:
 
     def ask(self, user_text: str, image_path: str = None) -> str:
         """Спросить модель. Она может по дороге вызвать инструменты."""
+        self.last_error = None               # по нему офлайн-мозг понимает, что пора ему
         if not self.ready:
             return ("Умный режим не подключён — нет ключа Gemini. "
                     "Простые команды я всё равно выполняю.")
@@ -134,6 +135,7 @@ class Brain:
 
         self.history.append({"role": "user", "parts": parts})
         self._trim()
+        turn_start = len(self.history) - 1       # откуда начался этот разговорный ход
 
         for _ in range(5):                       # до 5 витков вызова инструментов
             payload = {
@@ -145,6 +147,11 @@ class Brain:
             try:
                 data = self._post(payload)
             except Exception as e:
+                self.last_error = e
+                # Недоделанный ход убираем целиком — вместе с вызовами инструментов,
+                # если сбой случился на втором витке. Иначе в истории останется
+                # вызов без ответа, и следующий запрос облако отвергнет как бессмыслицу
+                del self.history[turn_start:]
                 return f"Мозг недоступен: {e}"
 
             cand = (data.get("candidates") or [{}])[0]

@@ -18,7 +18,8 @@ param(
     [string]$GeminiKey,
     [string]$BotToken,
     [string]$OwnerName,
-    [switch]$NoShortcut       # не класть ярлык на рабочий стол
+    [switch]$NoShortcut,      # не класть ярлык на рабочий стол
+    [switch]$LocalBrain       # без вопросов поставить и свою модель (1,4 ГБ)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -146,6 +147,18 @@ for size in ('tiny', 'small'):
     print('  готово:', size)
 "@
 Готово 'модель на месте'
+
+# --- 6б. Свой мозг: работать без интернета ---------------------------------
+Шаг 'Свой мозг для работы без интернета'
+Write-Host '    Когда пропадает интернет или кончается бесплатный лимит Gemini, Джарвис'
+Write-Host '    продолжает выполнять команды своей моделью на видеокарте. Это 1,4 ГБ.'
+$wantLocal = if ($Unattended) { $LocalBrain } else {
+    (Read-Host '    Поставить? [Д/н]') -notmatch '^(н|n|нет|no)'
+}
+if ($wantLocal) {
+    & $py -c "import sys; sys.path.insert(0, r'$root'); from core import config; config.setup_console(); from core.local_brain import install; sys.exit(0 if install() else 1)"
+    if ($LASTEXITCODE -eq 0) { Готово 'свой мозг на месте' } else { Беда 'свой мозг не встал — Джарвис работает и без него, только с интернетом' }
+}
 
 # --- 7. Проверка -----------------------------------------------------------
 Шаг 'Проверяю'

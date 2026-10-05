@@ -126,7 +126,9 @@ class Jarvis:
     def _init_brain(self):
         try:
             from core.brain import Brain
-            self.brain = Brain(self.cfg)
+            from core.local_brain import HybridBrain
+            # Облако, пока отвечает; упало — своя модель на видеокарте (core/local_brain.py)
+            self.brain = HybridBrain(Brain(self.cfg), self.cfg)
         except Exception as e:
             print(f"[brain] не поднялся: {e}")
             self.brain = None
