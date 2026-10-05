@@ -29,7 +29,6 @@ Internet — **On**. Потом *Run All*. Займёт около двух ча
     ("code", """# Библиотеки. Unsloth учит в 2 раза быстрее и в 4-битном режиме
 # укладывает 2B-модель с длинным контекстом в 16 ГБ T4
 %pip install -q unsloth
-%pip install -q --no-deps --upgrade "trl>=0.23" "peft>=0.17"
 import torch, json, os, random, urllib.request
 print(torch.__version__, torch.cuda.get_device_name(0))"""),
 
@@ -75,16 +74,23 @@ assert '<|im_start|>assistant' in sample, 'шаблон чата не тот, ч
 from trl import SFTTrainer, SFTConfig
 from unsloth.chat_templates import train_on_responses_only
 
+import inspect
 ds = Dataset.from_list([{"text": render(i)} for i in train])
-trainer = SFTTrainer(
-    model=model, tokenizer=tokenizer, train_dataset=ds,
-    args=SFTConfig(
-        dataset_text_field="text", max_seq_length=MAX_LEN,
-        per_device_train_batch_size=1, gradient_accumulation_steps=8,
-        num_train_epochs=2, learning_rate=2e-4, lr_scheduler_type="cosine",
-        warmup_ratio=0.03, logging_steps=10, save_strategy="no",
-        fp16=not torch.cuda.is_bf16_supported(), bf16=torch.cuda.is_bf16_supported(),
-        optim="adamw_8bit", seed=13, output_dir="out", report_to="none"))
+# Имена параметров у trl менялись от версии к версии (max_seq_length → max_length,
+# tokenizer → processing_class). Берём то, что есть в установленной версии,
+# иначе запуск упадёт через двадцать минут установки
+cfg = dict(dataset_text_field="text",
+           per_device_train_batch_size=1, gradient_accumulation_steps=8,
+           num_train_epochs=2, learning_rate=2e-4, lr_scheduler_type="cosine",
+           warmup_ratio=0.03, logging_steps=10, save_strategy="no",
+           fp16=not torch.cuda.is_bf16_supported(), bf16=torch.cuda.is_bf16_supported(),
+           optim="adamw_8bit", seed=13, output_dir="out", report_to="none")
+cfg_params = inspect.signature(SFTConfig).parameters
+cfg["max_length" if "max_length" in cfg_params else "max_seq_length"] = MAX_LEN
+trainer_params = inspect.signature(SFTTrainer.__init__).parameters
+tok_arg = "processing_class" if "processing_class" in trainer_params else "tokenizer"
+trainer = SFTTrainer(model=model, train_dataset=ds, args=SFTConfig(**cfg),
+                     **{tok_arg: tokenizer})
 # Учим только ответам Джарвиса. Вопросы хозяина и результаты инструментов
 # модель видит, но подражать им не должна
 trainer = train_on_responses_only(trainer,
