@@ -42,3 +42,9 @@ __pycache__/
 
 # --- локальная модель: сотни мегабайт, скачивается отдельно ---
 llm/
+
+# --- учебник своей модели: в репозиторий только то, что берёт ноутбук Kaggle ---
+train/data/run.log
+train/data/phrases.jsonl
+train/data/labeled.jsonl
+train/data/honesty.jsonl

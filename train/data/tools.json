@@ -1,0 +1,710 @@
+[
+ {
+  "name": "open_app",
+  "description": "Запустить установленную программу по названию",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "название программы"
+    }
+   }
+  }
+ },
+ {
+  "name": "close_app",
+  "description": "Закрыть запущенную программу",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "open_site",
+  "description": "Открыть сайт в браузере",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "site": {
+     "type": "string",
+     "description": "адрес или название: ютуб, гитхаб"
+    }
+   }
+  }
+ },
+ {
+  "name": "web_search",
+  "description": "Открыть поиск Google в браузере хозяина. Только когда он прямо просит поискать или открыть в браузере. На вопросы, ответ на которые знаешь, отвечай сам, ничего не открывая.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "volume",
+  "description": "Громкость системы. «Громкость 30», «сделай 30», «убавь до 30» — level=30. «Тише на 20» — change=-20, «громче на 10» — change=10. Просто «потише» или «погромче» без числа — change=-10 или 10. «Выключи звук» — mute=true. Узнать текущую — без параметров. Level и change вместе не передавай.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "level": {
+     "type": "integer",
+     "description": "поставить ровно этот уровень, 0-100"
+    },
+    "change": {
+     "type": "integer",
+     "description": "изменить на столько: -30 тише, 20 громче"
+    },
+    "mute": {
+     "type": "boolean",
+     "description": "true — выключить звук, false — включить"
+    }
+   }
+  }
+ },
+ {
+  "name": "media",
+  "description": "Глобальные мультимедийные клавиши — для Spotify и прочих плееров. Для видео в браузере НЕ годится, там инструмент video",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "action": {
+     "type": "string",
+     "description": "play, pause, next, prev, stop"
+    }
+   }
+  }
+ },
+ {
+  "name": "system_status",
+  "description": "Загрузка процессора, памяти, места на дисках",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "current_time",
+  "description": "Текущие дата и время",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "remember",
+  "description": "Запомнить факт о хозяине навсегда",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "recall",
+  "description": "Вспомнить, что известно по теме",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "add_task",
+  "description": "Добавить задачу или напоминание в график",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "text": {
+     "type": "string"
+    },
+    "when": {
+     "type": "string",
+     "description": "завтра в 15, через 20 минут"
+    }
+   }
+  }
+ },
+ {
+  "name": "list_tasks",
+  "description": "Показать задачи",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "period": {
+     "type": "string",
+     "description": "today, tomorrow, week, all"
+    }
+   }
+  }
+ },
+ {
+  "name": "complete_task",
+  "description": "Отметить задачу выполненной",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "note",
+  "description": "Записать мысль в дневник заметок",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "search_notes",
+  "description": "Поиск по заметкам",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "look_at_screen",
+  "description": "Посмотреть на экран хозяина и ответить, что там. Работает несколько секунд — вызывай, только когда вопрос про то, что сейчас на экране.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "question": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "find_file",
+  "description": "Найти файл на компьютере",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "pattern": {
+     "type": "string"
+    },
+    "where": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "clipboard",
+  "description": "Прочитать или записать буфер обмена",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "action": {
+     "type": "string",
+     "description": "get или set"
+    },
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "powershell",
+  "description": "Выполнить команду PowerShell на компьютере. Через это можно всё: файлы, папки, процессы, сеть, настройки. Не спрашивай разрешения заранее: всё, кроме чтения, инструмент сам вернёт на подтверждение. Никогда не управляй программами нажатием клавиш (SendKeys): для окон, браузера и Telegram есть свои инструменты. В reason коротко и по-человечески напиши, что команда сделает.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "command": {
+     "type": "string"
+    },
+    "reason": {
+     "type": "string",
+     "description": "зачем это нужно"
+    }
+   }
+  }
+ },
+ {
+  "name": "windows",
+  "description": "Какие окна сейчас открыты",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "focus_window",
+  "description": "Переключиться на окно программы",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "browser",
+  "description": "Управлять уже открытым браузером хозяина (с его сессиями и логинами). action: new_tab, close_tab, next_tab, back, forward, reload, scroll_down, scroll_up, top, goto, find, type",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "action": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string",
+     "description": "адрес для goto или текст для find/type"
+    }
+   }
+  }
+ },
+ {
+  "name": "type_text",
+  "description": "Напечатать текст в активное окно, без Enter. Не для мессенджеров: сообщения в Telegram — только через telegram_send.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "youtube_stats",
+  "description": "Статистика YouTube-канала",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "channel": {
+     "type": "string",
+     "description": "@handle, пусто — свой канал"
+    }
+   }
+  }
+ },
+ {
+  "name": "youtube_latest",
+  "description": "Последние ролики канала и их просмотры",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "channel": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "youtube_play",
+  "description": "Включить видео на YouTube. ЕДИНСТВЕННЫЙ правильный способ: находит видео и открывает прямо страницу просмотра, оно сразу играет. Не открывай видео через open_site и не пытайся нажимать по результатам поиска — так не работает. Если хозяин говорит «не то» или «следующее» — вызови с next=true, поиск не повторяй. «Включи второе» — number=2",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string",
+     "description": "что искать"
+    },
+    "next": {
+     "type": "boolean",
+     "description": "включить следующий вариант"
+    },
+    "number": {
+     "type": "integer",
+     "description": "номер из показанного списка"
+    }
+   }
+  }
+ },
+ {
+  "name": "youtube_search",
+  "description": "Показать названия вариантов, чтобы хозяин выбрал сам. Годится, когда описание расплывчатое. Потом youtube_play с number",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "query": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "video",
+  "description": "Управлять видео, которое играет в браузере: pause, play, stop, mute, fullscreen, theater, forward, back, next, prev, captions. Используй это, а не media: инструмент выводит браузер вперёд, нажимает клавишу самого YouTube и ПРОВЕРЯЕТ по звуку, получилось ли. Что он вернул — то и есть правда",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "action": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "who_sounds",
+  "description": "Что сейчас звучит на компьютере — по уровню звука приложений. Так можно проверить, играет ли видео, вместо того чтобы догадываться",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "telegram_unread",
+  "description": "Непрочитанные сообщения в Telegram",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "telegram_read",
+  "description": "Прочитать переписку с человеком",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "chat": {
+     "type": "string"
+    },
+    "n": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ {
+  "name": "telegram_open_chat",
+  "description": "Открыть чат в приложении Telegram на компьютере по его названию. Ничего не отправляет. Единственный правильный способ переключить чат.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "chat": {
+     "type": "string",
+     "description": "название чата или имя человека"
+    }
+   }
+  }
+ },
+ {
+  "name": "telegram_send",
+  "description": "Отправить сообщение в Telegram. Вызывай сразу, не спрашивая заранее: инструмент сам вернёт запрос на подтверждение с текстом и получателем.",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "chat": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "weather",
+  "description": "Погода сейчас и на сегодня",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "city": {
+     "type": "string",
+     "description": "город; пусто — запомненный"
+    }
+   }
+  }
+ },
+ {
+  "name": "timer",
+  "description": "Поставить таймер",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "minutes": {
+     "type": "number"
+    },
+    "label": {
+     "type": "string",
+     "description": "на что таймер"
+    }
+   }
+  }
+ },
+ {
+  "name": "timers_left",
+  "description": "Сколько осталось на таймерах",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "disk_space",
+  "description": "Сколько свободного места на дисках",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "clean_preview",
+  "description": "Только посмотреть, сколько мусора можно удалить. Если просят именно почистить — не используй, сразу вызывай clean_disk.",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "clean_disk",
+  "description": "Очистить диск от временных файлов и кэшей. Вызывай сразу, как только попросили почистить, не спрашивая заранее: инструмент сам вернёт запрос на подтверждение, и только тогда спроси хозяина.",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "calculate",
+  "description": "Посчитать арифметическое выражение",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "expression": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "exchange_rate",
+  "description": "Курс валюты к рублю",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "currency": {
+     "type": "string",
+     "description": "доллар, евро, юань"
+    }
+   }
+  }
+ },
+ {
+  "name": "convert_currency",
+  "description": "Перевести сумму из валюты в валюту",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "amount": {
+     "type": "number"
+    },
+    "frm": {
+     "type": "string"
+    },
+    "to": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "convert_unit",
+  "description": "Перевести единицы: км, м, кг, часы, гигабайты",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "amount": {
+     "type": "number"
+    },
+    "frm": {
+     "type": "string"
+    },
+    "to": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "set_alarm",
+  "description": "Поставить будильник на время",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "time": {
+     "type": "string",
+     "description": "7 утра, 15:30"
+    }
+   }
+  }
+ },
+ {
+  "name": "translate",
+  "description": "Перевести текст на другой язык",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "text": {
+     "type": "string"
+    },
+    "to": {
+     "type": "string",
+     "description": "код языка: en, de, fr, zh"
+    }
+   }
+  }
+ },
+ {
+  "name": "add_student",
+  "description": "Завести ученика: имя, предмет, ставка за занятие",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "subject": {
+     "type": "string"
+    },
+    "rate": {
+     "type": "integer"
+    },
+    "duration": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ {
+  "name": "students",
+  "description": "Список учеников",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "set_schedule",
+  "description": "Регулярное занятие: ученик, день недели, время",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "weekday": {
+     "type": "string"
+    },
+    "time": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "lessons",
+  "description": "Расписание занятий",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "period": {
+     "type": "string",
+     "description": "today, tomorrow, week"
+    }
+   }
+  }
+ },
+ {
+  "name": "next_lesson",
+  "description": "Когда следующее занятие и с кем",
+  "parameters": {
+   "type": "object",
+   "properties": {}
+  }
+ },
+ {
+  "name": "start_lesson",
+  "description": "Начать урок: ставит таймер на длительность",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "finish_lesson",
+  "description": "Отметить урок проведённым",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "student_note",
+  "description": "Записать наблюдение об ученике в журнал",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "about_student",
+  "description": "Что известно об ученике: предмет, занятия, заметки",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "name": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "earnings",
+  "description": "Заработок за период по проведённым занятиям",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "period": {
+     "type": "string",
+     "description": "today, week, month"
+    }
+   }
+  }
+ }
+]
