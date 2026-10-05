@@ -136,3 +136,6 @@
 {"messages": [{"role": "user", "content": "Покрась волосы в синий цвет"}, {"role": "assistant", "content": "Красить волосы я не умею."}], "intent": "impossible"}
 {"messages": [{"role": "user", "content": "Принеси плед с дивана"}, {"role": "assistant", "content": "Плед принести не смогу."}], "intent": "impossible"}
 {"messages": [{"role": "user", "content": "прочитай мне статью на экране"}, {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "ui_read", "arguments": {}}}]}], "intent": "ui_read"}
+{"messages": [{"role": "user", "content": "слушай открой пкрвый"}, {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "open_file", "arguments": {"number": 1}}}]}], "intent": "open_file"}
+{"messages": [{"role": "user", "content": "так открой досмый"}, {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "open_file", "arguments": {"number": 10}}}]}], "intent": "open_file"}
+{"messages": [{"role": "user", "content": "Скинь мне четвертый в телеграм"}, {"role": "assistant", "content": "", "tool_calls": [{"type": "function", "function": {"name": "send_file", "arguments": {"number": 4}}}]}], "intent": "send_file"}

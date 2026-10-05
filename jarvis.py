@@ -133,6 +133,13 @@ class Jarvis:
         except Exception as e:
             print(f"[brain] не поднялся: {e}")
             self.brain = None
+        try:
+            # Список файлов на дисках — в фоне: обойти D: с холодного диска
+            # занимает до двадцати секунд, а искать по готовому — мгновенно
+            from skills import files
+            files.start_background()
+        except Exception as e:
+            print(f"[файлы] список не строится: {e}")
 
     # ---------- речь ----------
     def say(self, text: str):
@@ -331,6 +338,10 @@ class Jarvis:
             print(f"[телефон] {status}")
             if phone.start():
                 self.phone = phone
+                # Инструменты получают облачный мозг — пусть знает про телефон
+                target = getattr(self.brain, "cloud", self.brain)
+                if target is not None:
+                    target.phone = phone
                 log.write("info", f"[телефон] {status}")
         except Exception as e:
             print(f"[телефон] не поднялся: {e}")

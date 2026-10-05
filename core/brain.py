@@ -336,7 +336,25 @@ def _t_look_at_screen(b, question: str = "Что на экране?"):
 
 
 def _t_find_file(b, pattern: str, where: str = None):
-    return S.find_file(pattern, where)
+    from skills import files as F
+    return F.report(pattern)
+
+
+def _t_open_file(b, number: int = 1):
+    from skills import files as F
+    return F.open_found(int(number or 1))
+
+
+def _t_send_file(b, number: int = 1):
+    """Найденный файл — в Telegram хозяину. Работает, только если подключён телефон."""
+    from skills import files as F
+    path = F.last(int(number or 1))
+    if not path:
+        return "Сначала найдём файл — скажи, какой."
+    phone = getattr(b, "phone", None)
+    if phone is None:
+        return "Телефон не подключён: нужен токен бота от @BotFather в config/.env."
+    return phone.send_file(path)
 
 
 def _t_clipboard(b, action: str = "get", text: str = ""):
@@ -417,6 +435,7 @@ TOOL_IMPL = {
     "add_task": _t_add_task, "list_tasks": _t_list_tasks, "complete_task": _t_complete_task,
     "note": _t_note, "search_notes": _t_search_notes, "look_at_screen": _t_look_at_screen,
     "find_file": _t_find_file, "clipboard": _t_clipboard, "powershell": _t_powershell,
+    "open_file": _t_open_file, "send_file": _t_send_file,
     "current_time": _t_time,
 }
 
@@ -470,8 +489,20 @@ TOOLS = [
      "description": ("Посмотреть на экран хозяина и ответить, что там. Работает несколько "
                      "секунд — вызывай, только когда вопрос про то, что сейчас на экране."),
      "parameters": _p(question={"type": "string"})},
-    {"name": "find_file", "description": "Найти файл на компьютере",
-     "parameters": _p(pattern={"type": "string"}, where={"type": "string"})},
+    {"name": "find_file",
+     "description": ("Найти файл на всех дисках по словам из названия или папки: «отчёт за "
+                     "сентябрь», «презентацию лцт», «readme джарвиса». Слова о типе («таблицу», "
+                     "«фото», «презентацию») сужают поиск. Возвращает пронумерованный список"),
+     "parameters": _p(pattern={"type": "string", "description": "слова, как сказал хозяин"},
+                      where={"type": "string"})},
+    {"name": "open_file",
+     "description": "Открыть файл из последнего поиска по номеру: «открой второй» — number=2",
+     "parameters": _p(number={"type": "integer"})},
+    {"name": "send_file",
+     "description": ("Прислать файл из последнего поиска хозяину в Telegram по номеру — «пришли "
+                     "его на телефон», «скинь мне первый». Если телефон не подключён, инструмент "
+                     "так и скажет"),
+     "parameters": _p(number={"type": "integer"})},
     {"name": "clipboard", "description": "Прочитать или записать буфер обмена",
      "parameters": _p(action={"type": "string", "description": "get или set"},
                       text={"type": "string"})},

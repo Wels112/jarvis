@@ -129,6 +129,31 @@ class Phone:
             log.write("error", f"[телефон] голосовой ответ: {type(e).__name__} {str(e)[:90]}")
             return None
 
+    def send_file(self, path: str, chat: int = 0) -> str:
+        """Прислать файл с компьютера в чат хозяина.
+
+        Ровно то, о чём хозяин просил для телефона: «достань мне файл». Боту
+        Telegram разрешено присылать до 50 МБ; больше — честно говорим, что
+        не пролезет, а не делаем вид, что отправили.
+        """
+        import os
+        chat = chat or self.owner
+        if not (self.available and chat):
+            return "Телефон не подключён: нужен токен бота и номер твоего чата в настройках."
+        if not os.path.exists(path):
+            return f"Файла {os.path.basename(path)} уже нет на месте."
+        size = os.path.getsize(path)
+        if size > 50 * 1024 * 1024:
+            return (f"{os.path.basename(path)} весит {size / 1024 ** 2:.0f} МБ, а Telegram "
+                    "принимает от бота до 50 — не пролезет.")
+        with open(path, "rb") as f:
+            ok = self._call("sendDocument", chat_id=chat, _wait=300,
+                            caption=os.path.basename(path)[:200],
+                            _files={"document": (os.path.basename(path), f)})
+        if ok is None:
+            return f"Не смог отправить {os.path.basename(path)} — Telegram не принял."
+        return f"Отправил {os.path.basename(path)} тебе в Telegram."
+
     def notify(self, text: str):
         """Напоминание или предупреждение — в телефон, если так настроено."""
         if self.push and self.available and self.owner:

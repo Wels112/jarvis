@@ -202,15 +202,40 @@
  },
  {
   "name": "find_file",
-  "description": "Найти файл на компьютере",
+  "description": "Найти файл на всех дисках по словам из названия или папки: «отчёт за сентябрь», «презентацию лцт», «readme джарвиса». Слова о типе («таблицу», «фото», «презентацию») сужают поиск. Возвращает пронумерованный список",
   "parameters": {
    "type": "object",
    "properties": {
     "pattern": {
-     "type": "string"
+     "type": "string",
+     "description": "слова, как сказал хозяин"
     },
     "where": {
      "type": "string"
+    }
+   }
+  }
+ },
+ {
+  "name": "open_file",
+  "description": "Открыть файл из последнего поиска по номеру: «открой второй» — number=2",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "number": {
+     "type": "integer"
+    }
+   }
+  }
+ },
+ {
+  "name": "send_file",
+  "description": "Прислать файл из последнего поиска хозяину в Telegram по номеру — «пришли его на телефон», «скинь мне первый». Если телефон не подключён, инструмент так и скажет",
+  "parameters": {
+   "type": "object",
+   "properties": {
+    "number": {
+     "type": "integer"
     }
    }
   }

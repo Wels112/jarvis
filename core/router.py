@@ -104,7 +104,11 @@ def _video_and_tabs(t: str):
     # «включи первое видео», «включи самое второе», «номер три»
     m = re.search(r"(?:включи|поставь|давай|открой)\s+(?:самое\s+|самый\s+|номер\s+)?"
                   r"(первое|первый|второе|второй|третье|третий|четв[её]ртое|пятое|[1-5])\b", t)
-    if m and (re.search(VIDEO, t) or YT._last["items"]):
+    # «Открой второй» после поиска файлов — про файлы: видео берём, только если
+    # про видео сказано прямо или видео искали позже файлов
+    from skills import files as _F
+    video_fresher = YT._last.get("at", 0) >= _F.last_at
+    if m and (re.search(VIDEO, t) or (YT._last["items"] and video_fresher)):
         if not YT._last["items"]:
             return Reply(say="Списка ещё нет — скажи, что найти, и включу.")
         return Reply(say=YT.play_number(ORDINALS[m.group(1)]))
@@ -150,8 +154,36 @@ def _video_and_tabs(t: str):
     return _ui_rules(t)
 
 
+def _file_rules(t: str):
+    """«Открой второй», «пришли его на телефон» — после поиска файлов.
+
+    Если перед этим искали видео, «открой второй» — про видео (это ловит
+    правило выше). Здесь — только когда файлы искали позже видео.
+    """
+    from skills import files as F
+    if not F._last or F.last_at < YT._last.get("at", 0):
+        return None
+    n = None
+    m = re.search(r"(первый|первое|второй|второе|третий|третье|четв[её]ртый|пятый|[1-5])\b", t)
+    if m:
+        n = ORDINALS.get(m.group(1).replace("ый", "ое").replace("ий", "ье").replace("ой", "ое"),
+                         ORDINALS.get(m.group(1)))
+    elif re.search(r"\b(его|её|ее|этот|этот файл|найденн\w+)\b", t):
+        n = 1
+    if n is None:
+        return None
+    if re.search(r"^(?:открой|запусти|покажи)\b", t):
+        return Reply(say=F.open_found(n))
+    if re.search(r"^(?:пришли|скинь|отправь|перешли)\b.*(?:телефон|телеграм|мне)", t):
+        return Reply(to_llm=True)        # отправка — через мозг: ему виден телефон
+    return None
+
+
 def _ui_rules(t: str):
     """«Нажми …» и «что тут можно нажать» — руками по названию (skills/ui.py)."""
+    reply = _file_rules(t)
+    if reply:
+        return reply
     from skills import ui as UI
     if re.search(r"^что\s+(?:тут\s+|здесь\s+|в этом окне\s+)?можно\s+нажать|"
                  r"^какие\s+(?:тут\s+|здесь\s+|есть\s+)?кнопки|^что\s+(?:есть\s+)?в этом окне", t):

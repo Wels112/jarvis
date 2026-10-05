@@ -382,6 +382,10 @@ class LiveConversation:
         if self._brain is None:
             from core.brain import Brain
             self._brain = Brain(self.cfg)
+        # Телефон — у самого Джарвиса; инструменту «пришли на телефон» он нужен
+        # и в живом разговоре. Берём при каждом обращении: телефон поднимается
+        # позже живого режима
+        self._brain.phone = getattr(self.j, "phone", None)
         return self._brain
 
     def _instruction(self) -> str:

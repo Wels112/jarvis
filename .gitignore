@@ -51,3 +51,4 @@ train/data/honesty.jsonl
 
 # --- настройки Claude Code для разработки (в т.ч. из ECC): только у себя ---
 .claude/
+data/files_index.json

@@ -9,6 +9,7 @@
 """
 import socket
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -161,7 +162,7 @@ def search_videos(query: str, n: int = 3) -> str:
 # Последняя выдача поиска и сколько из неё уже включили — чтобы «это не то,
 # давай следующее» работало без нового поиска. На показе 05.10.2026 по
 # расплывчатому описанию нашлось чужое видео, и дальше было некуда идти.
-_last = {"query": "", "items": [], "played": -1}
+_last = {"query": "", "items": [], "played": -1, "at": 0.0}
 
 
 def _play(item) -> str:
@@ -212,7 +213,7 @@ def play_on_youtube(query: str) -> str:
         return f"Не смог найти сам — открыл страницу поиска по запросу {query}."
     if not items:
         return f"По запросу «{query}» на Ютубе ничего нет."
-    _last.update(query=query, items=items, played=0)
+    _last.update(query=query, items=items, played=0, at=time.time())
     more = f" Если не то — скажи «следующее», в запасе ещё {len(items) - 1}."
     return _play(items[0]) + more
 
@@ -237,7 +238,7 @@ def search_titles(query: str, n: int = 5) -> str:
         items = _search_items(query, n)
         if not items:
             return f"По запросу «{query}» ничего не нашлось."
-        _last.update(query=query, items=items, played=-1)
+        _last.update(query=query, items=items, played=-1, at=time.time())
         lines = [f"{i}. {_clean(it['snippet']['title'])} — {_clean(it['snippet']['channelTitle'])}"
                  for i, it in enumerate(items, 1)]
         return "Нашёл: " + "; ".join(lines) + ". Скажи номер, и включу."

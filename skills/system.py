@@ -595,25 +595,9 @@ def clipboard_set(text: str) -> str:
 
 
 def find_file(pattern: str, where: str = None, limit: int = 8) -> str:
-    roots = [Path(where)] if where else [
-        Path.home() / "Desktop", Path.home() / "Documents", Path.home() / "Downloads",
-    ]
-    hits = []
-    for r in roots:
-        if not r.exists():
-            continue
-        try:
-            for p in r.rglob(f"*{pattern}*"):
-                hits.append(p)
-                if len(hits) >= limit:
-                    break
-        except Exception:
-            pass
-        if len(hits) >= limit:
-            break
-    if not hits:
-        return f"Ничего не нашёл по запросу «{pattern}»."
-    return f"Нашёл {len(hits)}: " + ", ".join(h.name for h in hits[:5])
+    """Поиск по всем дискам — см. skills/files.py (старый смотрел только три папки на C:)."""
+    from skills import files as F
+    return F.report(pattern)
 
 
 def what_time() -> str:

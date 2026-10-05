@@ -19,8 +19,25 @@ LOGS.mkdir(parents=True, exist_ok=True)
 KEEP_DAYS = 14
 
 
+def _run_tag() -> str:
+    """Прогоны тестов пишут в свой журнал, а не в журнал живого Джарвиса.
+
+    05.10.2026 записи теста переподключения («связь оборвалась, подключаюсь
+    заново» трижды подряд) легли в настоящий журнал и выглядели как настоящие
+    обрывы — разбирая его, легко принять тест за беду.
+    """
+    try:
+        script = Path(sys.argv[0]).resolve() if sys.argv and sys.argv[0] not in ("", "-c") else None
+    except Exception:
+        script = None
+    return "test-" if script and script.parent.name in ("tests", "train") else ""
+
+
+TAG = _run_tag()
+
+
 def _today_file() -> Path:
-    return LOGS / f"jarvis-{datetime.now():%Y-%m-%d}.log"
+    return LOGS / f"jarvis-{TAG}{datetime.now():%Y-%m-%d}.log"
 
 
 def write(kind: str, text: str):
@@ -51,7 +68,8 @@ def cleanup(days: int = KEEP_DAYS):
     removed = 0
     for f in LOGS.glob("jarvis-*.log"):
         try:
-            stamp = datetime.strptime(f.stem.replace("jarvis-", ""), "%Y-%m-%d")
+            stamp = datetime.strptime(f.stem.replace("jarvis-", "").replace("test-", ""),
+                                      "%Y-%m-%d")
             if stamp < edge:
                 f.unlink()
                 removed += 1
