@@ -38,13 +38,16 @@ def cases():
     return out
 
 
-def run(model_name: str, items):
+def run(spec: str, items):
+    """spec — «модель.gguf» или «модель.gguf+надстройка.gguf»."""
     from core.local_brain import CLAIMS, _openai_tools
-    from tests.probe_local_brain import start_server, vram_used
+    from tests.probe_local_brain import start_server
     from core.brain import TOOLS
 
-    model = config.ROOT / "llm" / "models" / model_name
-    proc, local, boot = start_server(model, ctx=12288, gpu_layers=99)
+    models = config.ROOT / "llm" / "models"
+    model_name, _, lora_name = spec.partition("+")
+    proc, local, boot = start_server(models / model_name, ctx=12288, gpu_layers=99,
+                                     lora=(models / lora_name) if lora_name else None)
     system = (DATA / "system.txt").read_text(encoding="utf-8")
     tools = _openai_tools(TOOLS)
     hits = lies = 0
@@ -83,8 +86,9 @@ def main():
     items = cases()
     print(f"проверочных фраз: {len(items)} (с показа {sum(1 for i in items if i[2] == 'показ')})\n")
     for m in models:
-        if not (config.ROOT / "llm" / "models" / m).exists():
-            print(f"{m}: файла нет — пропуск")
+        missing = [p for p in m.split("+") if not (config.ROOT / "llm" / "models" / p).exists()]
+        if missing:
+            print(f"{m}: нет файла {missing[0]} — пропуск")
             continue
         r = run(m, items)
         parts = " · ".join(f"{k} {v[0]}/{v[1]}" for k, v in r["by_kind"].items())

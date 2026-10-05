@@ -73,6 +73,13 @@ class LocalModel:
     def __init__(self, cfg: dict):
         b = cfg.get("brain", {})
         self.model_path = LLM / "models" / b.get("local_model", DEFAULT_MODEL)
+        # Надстройка дообучения (LoRA) поверх модели — десятки мегабайт вместо
+        # полутора гигабайт новой модели. Нет файла — работаем на исходной
+        lora = b.get("local_lora", "")
+        self.lora_path = (LLM / "models" / lora) if lora else None
+        if self.lora_path and not self.lora_path.exists():
+            log.write("error", f"[свой мозг] надстройки {lora} нет — работаю на исходной модели")
+            self.lora_path = None
         self.exe = LLM / "bin" / "llama-server.exe"
         self.port = int(b.get("local_port", 8090))
         self.ctx = int(b.get("local_ctx", 12288))
@@ -111,6 +118,8 @@ class LocalModel:
                     "-ngl", str(self.gpu_layers), "--jinja", "-np", "1",
                     "--slot-save-path", str(LLM / "cache"),
                     "--host", "127.0.0.1", "--port", str(self.port)]
+            if self.lora_path:
+                args += ["--lora", str(self.lora_path)]
             logf = open(LLM / "server.log", "w", encoding="utf-8")
             self._proc = subprocess.Popen(args, stdout=logf, stderr=subprocess.STDOUT,
                                           creationflags=subprocess.CREATE_NO_WINDOW)
@@ -140,7 +149,9 @@ class LocalModel:
         if self._prefix_ready:
             return
         import hashlib
-        key = hashlib.sha1((self.model_path.name + system +
+        # Надстройка меняет веса — с ней разобранное начало уже другое
+        lora = self.lora_path.name if self.lora_path else ""
+        key = hashlib.sha1((self.model_path.name + lora + system +
                             json.dumps(tools, ensure_ascii=False)).encode()).hexdigest()[:16] + ".bin"
         t0 = time.monotonic()
         try:

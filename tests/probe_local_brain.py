@@ -42,10 +42,12 @@ def vram_used() -> str:
         return "?"
 
 
-def start_server(model: Path, ctx: int, gpu_layers: int):
+def start_server(model: Path, ctx: int, gpu_layers: int, lora: Path = None):
     exe = LLM / "bin" / "llama-server.exe"
     args = [str(exe), "-m", str(model), "-c", str(ctx), "-ngl", str(gpu_layers),
             "--jinja", "--host", "127.0.0.1", "--port", str(PORT), "-np", "1"]
+    if lora:
+        args += ["--lora", str(lora)]
     log = open(LLM / "server.log", "w", encoding="utf-8")
     proc = subprocess.Popen(args, stdout=log, stderr=subprocess.STDOUT,
                             creationflags=subprocess.CREATE_NO_WINDOW)
