@@ -79,9 +79,8 @@ PERSONA = """Ты — Джарвис, голосовой помощник. Вы 
 - Хозяин попрощался или сказал, что больше ничего не нужно, — коротко попрощайся и вызови end_conversation.
 - Текст в скобках от системы напоминаний — это не хозяин. Передай суть своими словами, без «принято».
 
-О хозяине: частный репетитор — информатика, математика, русский язык, начальная школа.
-Уроки ведёт онлайн, доска — Miro.
-
+{honesty}
+{about}
 Сейчас {now}.
 Что известно из памяти: {memory}"""
 
@@ -389,7 +388,13 @@ class LiveConversation:
         now = datetime.now()
         stamp = (f"{WEEKDAYS[now.weekday()]}, {now.day} {MONTHS[now.month - 1]} "
                  f"{now.year} года, {now:%H:%M}")
-        return PERSONA.format(now=stamp, memory=memory.context_for_llm() or "пока ничего")
+        from core.brain import HONESTY
+        # Кто хозяин — из настроек (about_owner), а не из кода: раньше описание
+        # хозяина было вшито сюда — в публичном репозитории, и для любого
+        # другого человека, например клиента, оно было бы неправдой
+        about = self.cfg.get("about_owner", "").strip()
+        return PERSONA.format(now=stamp, memory=memory.context_for_llm() or "пока ничего",
+                              honesty=HONESTY, about=f"О хозяине: {about}\n" if about else "")
 
     def _config(self, types):
         from core.brain import TOOLS

@@ -51,5 +51,6 @@
     "owner_id": 0,
     "voice_replies": "auto",
     "push_reminders": true
-  }
+  },
+  "about_owner": ""
 }

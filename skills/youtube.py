@@ -171,25 +171,50 @@ def _play(item) -> str:
     return f"Включаю: {_clean(sn['title'])} — канал {_clean(sn['channelTitle'])}."
 
 
+def _search_free(query: str, n: int):
+    """Поиск без ключа — через yt-dlp, теми же полями, что у официального API.
+
+    Без ключа раньше открывалась только страница поиска, а видео само не
+    включалось — у клиента ключа YouTube не будет. И у хозяина бесплатный ключ
+    кончается примерно на сотом поиске за день. yt-dlp читает выдачу так же,
+    как браузер; замер 05.10.2026 — 1,7 с, первый результат тот же, что у API.
+    """
+    import yt_dlp
+    opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "skip_download": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(f"ytsearch{n}:{query}", download=False)
+    return [{"id": {"videoId": e["id"]},
+             "snippet": {"title": e.get("title") or "", "channelTitle":
+                         e.get("channel") or e.get("uploader") or "неизвестный канал"}}
+            for e in info.get("entries") or [] if e.get("id")]
+
+
+def _search_items(query: str, n: int = 5):
+    """Сначала официальный API (если есть ключ), при отказе — без ключа."""
+    if _key():
+        try:
+            d = _get("search", part="snippet", q=query, type="video", maxResults=n,
+                     relevanceLanguage="ru")
+            return d.get("items", [])
+        except Exception:
+            pass                                  # кончилась квота или нет сети до API
+    return _search_free(query, n)
+
+
 def play_on_youtube(query: str) -> str:
     """Найти и сразу включить самое подходящее видео в браузере."""
     import webbrowser
-    if not _key():
-        webbrowser.open("https://www.youtube.com/results?search_query=" + query)
-        return f"Открыл поиск по запросу {query}."
     try:
         # Пять вариантов, а не один: если хозяин скажет «не то», следующий уже под рукой
-        d = _get("search", part="snippet", q=query, type="video", maxResults=5,
-                 relevanceLanguage="ru")
-        items = d.get("items", [])
-        if not items:
-            return f"По запросу «{query}» на Ютубе ничего нет."
-        _last.update(query=query, items=items, played=0)
-        more = f" Если не то — скажи «следующее», в запасе ещё {len(items) - 1}."
-        return _play(items[0]) + more
+        items = _search_items(query, 5)
     except Exception:
         webbrowser.open("https://www.youtube.com/results?search_query=" + query)
-        return f"Открыл поиск по запросу {query}."
+        return f"Не смог найти сам — открыл страницу поиска по запросу {query}."
+    if not items:
+        return f"По запросу «{query}» на Ютубе ничего нет."
+    _last.update(query=query, items=items, played=0)
+    more = f" Если не то — скажи «следующее», в запасе ещё {len(items) - 1}."
+    return _play(items[0]) + more
 
 
 def play_next() -> str:
@@ -208,12 +233,8 @@ def play_next() -> str:
 
 def search_titles(query: str, n: int = 5) -> str:
     """Названия вариантов, чтобы хозяин выбрал сам, а не угадывать за него."""
-    if not _key():
-        return "Нет ключа YouTube."
     try:
-        d = _get("search", part="snippet", q=query, type="video", maxResults=n,
-                 relevanceLanguage="ru")
-        items = d.get("items", [])
+        items = _search_items(query, n)
         if not items:
             return f"По запросу «{query}» ничего не нашлось."
         _last.update(query=query, items=items, played=-1)
