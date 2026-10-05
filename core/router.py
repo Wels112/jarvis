@@ -120,6 +120,11 @@ def _video_and_tabs(t: str):
         (r"перемот\w*\s+(?:на\s+\w+\s+)?назад|отмотай|назад на \d+", "back"),
         (r"субтитр", "captions"),
     ]
+    # «Видео не остановилось», «до сих пор играет» — хозяин говорит, что не вышло.
+    # Не спорим и не верим прошлому отчёту: пробуем снова, и video сам проверит по звуку
+    if re.search(rf"(?:{VIDEO}|звук|музыка)\b.*(?:не останов\w*|не выключ\w*|"
+                 r"(?:до сих пор|все еще|всё ещё|опять)\s+(?:идет|идёт|играет|звучит))", t):
+        return Reply(say=D.video("pause"))
     for pattern, action in controls:
         if re.search(pattern, t):
             return Reply(say=D.video(action))
@@ -142,7 +147,36 @@ def _video_and_tabs(t: str):
     # «что сейчас играет» — по звуку, а не догадкой
     if re.search(r"что\s+(сейчас\s+)?(играет|звучит|за звук)|откуда звук", t):
         return Reply(say=S.who_sounds())
-    return None
+    return _ui_rules(t)
+
+
+def _ui_rules(t: str):
+    """«Нажми …» и «что тут можно нажать» — руками по названию (skills/ui.py)."""
+    from skills import ui as UI
+    if re.search(r"^что\s+(?:тут\s+|здесь\s+|в этом окне\s+)?можно\s+нажать|"
+                 r"^какие\s+(?:тут\s+|здесь\s+|есть\s+)?кнопки|^что\s+(?:есть\s+)?в этом окне", t):
+        return Reply(say=UI.elements_report())
+    m = re.search(r"^(?:нажми|кликни|щелкни|щёлкни|ткни|жми)\s+(?:на\s+)?"
+                  r"(?:кнопку\s+|пункт\s+|ссылку\s+|вкладку\s+|меню\s+)?(.+)$", t)
+    if not m:
+        return None
+    target = m.group(1).strip()
+    # Клавиши — не кнопки на экране
+    if re.fullmatch(r"(?:на\s+)?паузу|пробел", target):
+        return Reply(say=D.video("pause") if "пауз" in target else (D.press("space") and "Нажал пробел."))
+    if re.fullmatch(r"эскейп|escape|esc|отмену", target):
+        D.press("esc")
+        return Reply(say="Нажал Escape.")
+    if re.fullmatch(r"энтер|enter|ввод", target):
+        # Enter в чате отправляет сообщение — отменить нельзя, поэтому через «да»
+        return Reply(say="Нажать Enter? Если открыт чат, это отправит сообщение. Скажи «да».",
+                     pending=lambda: (D.press("enter"), "Нажал Enter.")[1],
+                     pending_desc="нажать Enter")
+    el, found, extra, title = UI.find(target)
+    if el is not None and UI.is_dangerous(found):
+        return Reply(say=f"Нажать «{found}» в окне «{title[:40]}»? Это не отменить. Скажи «да».",
+                     pending=lambda: UI.click(found), pending_desc=f"нажать «{found}»")
+    return Reply(say=UI.click(target))
 
 
 def handle(text: str, cfg: dict) -> Reply:
@@ -282,7 +316,8 @@ def handle(text: str, cfg: dict) -> Reply:
 
     # --- счёт, деньги, единицы ---
     m = re.search(r"^(?:сколько будет|посчитай|вычисли|подсчитай)\s+(.+)$", t)
-    if m:
+    # «посчитай в калькуляторе кнопками» — просьба нажимать, а не ответ: отдаём мозгу
+    if m and not re.search(r"калькулятор|кнопк", t):
         return Reply(say=TL.calculate(m.group(1)))
     m = re.search(r"(\d+(?:[.,]\d+)?)\s*процентов?\s+от\s+(\d+(?:[.,]\d+)?)", t)
     if m:

@@ -84,6 +84,13 @@ def main():
         ("напомни завтра утром позвонить в банк", {"add_task"}),
     ]
 
+    # «Включи первое» и «это не то, следующее» осмысленны только после поиска
+    # видео — как на показе. Поиск заглушен, поэтому выдачу кладём руками
+    from skills import youtube as YT
+    YT._last.update(query="видео", played=0, items=[
+        {"id": {"videoId": f"v{i}"}, "snippet": {"title": f"видео {i}", "channelTitle": "канал"}}
+        for i in range(5)])
+
     by_rules = by_model = asked_model = 0
     for phrase, want in list(CASES) + LONG_TAIL:
         CALLED.clear()

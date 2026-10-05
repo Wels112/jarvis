@@ -45,6 +45,14 @@ ALIASES = {
     "визуал студио код": "visual studio code", "код": "visual studio code",
     "клод": "claude", "клауд": "claude",
     "настройки": "ms-settings:", "панель управления": "control",
+    # Модели зовут программы по-английски, а в русской Windows они по-русски:
+    # на проверке 05.10.2026 «Calculator» не нашёлся, хотя Калькулятор был открыт
+    "calculator": "калькулятор", "calc": "калькулятор", "notepad": "блокнот",
+    "settings": "параметры", "explorer": "проводник", "file explorer": "проводник",
+    "task manager": "диспетчер задач", "camera": "камера", "photos": "фотографии",
+    "calendar": "календарь", "mail": "почта", "clock": "часы", "alarms": "часы",
+    "snipping tool": "ножницы", "control panel": "панель управления",
+    "command prompt": "командная строка", "terminal": "терминал",
 }
 
 # У некоторых программ процесс называется не так, как само приложение
@@ -203,9 +211,28 @@ def _launch(entry: dict):
         os.startfile(entry["lnk"])
 
 
-def open_app(name: str) -> str:
+def _already_open(entry: dict):
+    """Окно этой программы, если она уже запущена: по процессу или по заголовку."""
+    name = entry["name"].lower()
+    procs = {p for p in (entry.get("exe"), PROCESS_NAMES.get(name), name.replace(" ", "")) if p}
+    for hwnd, title, pname, _ in _visible_windows():
+        if pname in procs or title.lower() == name or title.lower().endswith(" - " + name):
+            return hwnd
+    return None
+
+
+def open_app(name: str, new_window: bool = False) -> str:
     entry, display = find_app(name)
     if entry:
+        # Уже открыта — выводим вперёд, а не плодим копию. Проверка 05.10.2026:
+        # мозг сказал «открой калькулятор», когда тот был открыт, Windows открыла
+        # второе окно, и дальше кнопки нажимались не там, где хозяин смотрел
+        hwnd = None if new_window else _already_open(entry)
+        if hwnd:
+            from skills.desktop import focus_window
+            import win32gui
+            focus_window(win32gui.GetWindowText(hwnd) or display)
+            return f"{display} уже открыт — вывел вперёд."
         try:
             _launch(entry)
             return f"Открываю {display}."

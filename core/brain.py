@@ -58,8 +58,9 @@ HONESTY = """Про результат инструмента — закон:
   получилось и почему. Никогда не говори «готово», «нажал», «закрыл», «остановил»,
   если инструмент этого не подтвердил.
 - Не пытайся щёлкать по экрану через powershell — SendKeys и Shell.Application там
-  запрещены, и попытка просто вернёт отказ. Для окон, вкладок, прокрутки и видео есть
-  инструменты browser, video, focus_window, type_text.
+  запрещены, и попытка просто вернёт отказ. Нажать кнопку, пункт меню или ссылку —
+  ui_click по названию; что вообще можно нажать — ui_elements. Для вкладок и
+  прокрутки — browser, для видео — video, для окон — focus_window.
 - Хозяин говорит, что не сработало, — поверь ему, а не своему прошлому отчёту.
   Проверь: who_sounds слышит, идёт ли звук, look_at_screen показывает экран. Сначала
   посмотри, потом отвечай.
@@ -145,7 +146,9 @@ class Brain:
         self._trim()
         turn_start = len(self.history) - 1       # откуда начался этот разговорный ход
 
-        for _ in range(5):                       # до 5 витков вызова инструментов
+        # До 10 витков: «посчитай кнопками 9 × 6» — это уже пять нажатий подряд, и
+        # при прежних пяти витках на ответ хозяину места не оставалось (05.10.2026)
+        for _ in range(10):
             payload = {
                 "contents": self.history,
                 "systemInstruction": self._system_block(),
@@ -187,13 +190,17 @@ class Brain:
 
     # ---------- исполнение инструментов ----------
     def _run_tool(self, name: str, args: dict) -> str:
+        # В журнал — и вызов, и ответ. Живой режим и своя модель это писали, а
+        # обычный мозг нет: разбирать, почему он «не смог открыть калькулятор»,
+        # приходилось вслепую (05.10.2026)
+        from core import log
         try:
             fn = TOOL_IMPL.get(name)
-            if not fn:
-                return f"нет такого инструмента: {name}"
-            return str(fn(self, **args))
+            result = f"нет такого инструмента: {name}" if not fn else str(fn(self, **args))
         except Exception as e:
-            return f"ошибка инструмента {name}: {e}"
+            result = f"ошибка инструмента {name}: {type(e).__name__}: {e}"
+        log.write("tool", f"{name} {args} → {result[:100]}")
+        return result
 
     def _trim(self):
         """Укоротить историю, не разрывая обмен с инструментами.
@@ -524,6 +531,23 @@ def _t_who_sounds(b):
     return S.who_sounds()
 
 
+def _t_ui_elements(b, window: str = ""):
+    from skills import ui as UI
+    return UI.elements_report(window)
+
+
+def _t_ui_click(b, name: str, window: str = ""):
+    """Нажать по названию. Кнопки «отправить», «удалить», «оплатить» — через «да»."""
+    from skills import ui as UI
+    el, found, extra, title = UI.find(name, window)
+    if el is not None and UI.is_dangerous(found):
+        b.pending_confirm = (f"нажать «{found}» в окне «{title[:40]}»",
+                             lambda: UI.click(found, window))
+        return (f"ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ: кнопка «{found}» в окне «{title[:40]}» — действие, "
+                "которое не отменить. Спроси хозяина одной фразой, нажимать ли.")
+    return UI.click(name, window)
+
+
 def _t_tg_unread(b):
     return TG.unread()
 
@@ -549,6 +573,7 @@ def _t_tg_open(b, chat: str):
 TOOL_IMPL.update({
     "windows": _t_windows, "focus_window": _t_focus_window, "browser": _t_browser,
     "video": _t_video, "who_sounds": _t_who_sounds,
+    "ui_elements": _t_ui_elements, "ui_click": _t_ui_click,
     "type_text": _t_type_text, "youtube_stats": _t_youtube_stats,
     "youtube_latest": _t_youtube_latest, "youtube_play": _t_youtube_play,
     "youtube_search": _t_youtube_search, "telegram_unread": _t_tg_unread,
@@ -599,6 +624,18 @@ TOOLS += [
      "description": ("Что сейчас звучит на компьютере — по уровню звука приложений. "
                      "Так можно проверить, играет ли видео, вместо того чтобы догадываться"),
      "parameters": _p()},
+    {"name": "ui_click",
+     "description": ("Нажать кнопку, пункт меню, ссылку или вкладку по её названию в любой "
+                     "программе или на странице в браузере — как это сделал бы человек мышью. "
+                     "Это ЕДИНСТВЕННЫЙ способ что-то нажать: не пытайся щёлкать через powershell. "
+                     "Работает и для ссылок ниже края экрана. Не знаешь точного названия — сначала "
+                     "ui_elements. window — часть заголовка окна, если нужно не активное"),
+     "parameters": _p(name={"type": "string", "description": "название кнопки или ссылки"},
+                      window={"type": "string", "description": "часть заголовка окна, необязательно"})},
+    {"name": "ui_elements",
+     "description": ("Что можно нажать в окне: кнопки, меню, ссылки, вкладки, поля — по названиям. "
+                     "Это «глаза» без камеры: работает без интернета и быстрее look_at_screen"),
+     "parameters": _p(window={"type": "string", "description": "часть заголовка окна, необязательно"})},
     {"name": "telegram_unread", "description": "Непрочитанные сообщения в Telegram", "parameters": _p()},
     {"name": "telegram_read", "description": "Прочитать переписку с человеком",
      "parameters": _p(chat={"type": "string"}, n={"type": "integer"})},
