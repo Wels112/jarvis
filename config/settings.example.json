@@ -50,7 +50,12 @@
     "enabled": true,
     "owner_id": 0,
     "voice_replies": "auto",
-    "push_reminders": true
+    "push_reminders": true,
+    "pinned_digest": true,
+    "confirm_tasks": true,
+    "morning_brief": "08:00",
+    "inbox_dir": ""
   },
+  "search_engine": "yandex",
   "about_owner": ""
 }
