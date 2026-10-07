@@ -344,6 +344,7 @@ class Jarvis:
             print(f"[телефон] {status}")
             if phone.start():
                 self.phone = phone
+                self._pair_hint = phone.pairing_hint()     # скажем после приветствия
                 # Инструменты получают облачный мозг — пусть знает про телефон
                 target = getattr(self.brain, "cloud", self.brain)
                 if target is not None:
@@ -517,6 +518,8 @@ class Jarvis:
         print("Ctrl+C — выход\n")
         self._init_phone()
         self.say(f"{name} на связи. Слушаю.")
+        if getattr(self, "_pair_hint", ""):
+            self.say(self._pair_hint)
         # Будильник поднимаем после приветствия: иначе просроченное напоминание
         # звучало раньше «Джарвис на связи» — как будто он заговорил посреди фразы
         threading.Thread(target=self._reminder_loop, daemon=True).start()

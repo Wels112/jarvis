@@ -68,7 +68,7 @@ def main():
     fake.clear()
     phone._handle({"chat": {"id": STRANGER}, "text": "удали все файлы"})
     answers = fake.texts()
-    ok = answers and "только хозяину" in answers[0] and str(STRANGER) in answers[0]
+    ok = len(answers) == 1 and "только хозяину" in answers[0]
     errors += not ok
     print(f"\n{'ok ' if ok else 'НЕТ'} чужому отказ: «{(answers[0] if answers else '—')[:60]}…»")
 
@@ -182,6 +182,50 @@ def main():
     for name, ok in checks:
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} сводка: {name}")
+
+    # 8. Привязка по коду: хозяином становится тот, кто прислал код с компьютера
+    import json
+    settings = Path("D:/pytmp/test_settings.json")
+    settings.write_text(json.dumps({"phone": {"owner_id": 0}, "name": "Джарвис"}), encoding="utf-8")
+    real_file = config.CONFIG_FILE
+    config.CONFIG_FILE = settings
+    j.cfg.setdefault("phone", {})["owner_id"] = 0
+    try:
+        fresh = Phone(j)
+        fresh.token, fresh.STATE = "тест", Path("D:/pytmp/test_phone_digest.json")
+        pf = FakePhone(fresh)
+        code = fresh.pair_code
+        wrong = "000000" if code != "000000" else "111111"
+        fresh._handle({"chat": {"id": OWNER}, "text": wrong})
+        step_wrong = (fresh.owner == 0 and pf.texts() and "отправь код" in pf.texts()[-1])
+        pf.clear()
+        fresh._handle({"chat": {"id": OWNER}, "text": " ".join(code)})       # с пробелами, как продиктован
+        saved = json.loads(settings.read_text(encoding="utf-8"))
+        step_ok = (fresh.owner == OWNER and not fresh.pair_code and pf.texts()
+                   and "слушаюсь только тебя" in pf.texts()[0]
+                   and saved == {"phone": {"owner_id": OWNER}, "name": "Джарвис"})
+        pf.clear()
+        fresh._handle({"chat": {"id": STRANGER}, "text": code})
+        step_reuse = fresh.owner == OWNER and pf.texts() and "только хозяину" in pf.texts()[-1]
+
+        j.cfg["phone"]["owner_id"] = 0          # привязка выше записала хозяина в общие настройки
+        brute = Phone(j)
+        brute.token = "тест"
+        bf = FakePhone(brute)
+        for i in range(7):
+            brute._handle({"chat": {"id": STRANGER}, "text": f"{i:06d}" if f"{i:06d}" != brute.pair_code else "x"})
+        replies = len(bf.texts())
+        brute._handle({"chat": {"id": STRANGER}, "text": brute.pair_code})
+        step_brute = replies == 5 and brute.owner == 0
+    finally:
+        config.CONFIG_FILE = real_file
+        settings.unlink(missing_ok=True)
+    for name, ok in (("неверный код — просит код, хозяина нет", step_wrong),
+                     ("верный код — хозяин, в настройках только owner_id", step_ok),
+                     ("тот же код из другого чата уже не работает", step_reuse),
+                     ("подбор: 5 ответов, потом тишина, и код уже не принят", step_brute)):
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} привязка: {name}")
 
     print(f"\nошибок: {errors}")
     return errors == 0

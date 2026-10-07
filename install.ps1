@@ -123,7 +123,7 @@ Write-Host '    Чтобы управлять с телефона, нужен б
 $bot = if ($Unattended) { $BotToken } else { Read-Host '    Вставь токен бота (Enter — пропустить)' }
 if ($bot) {
     Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot")
-    Готово 'токен записан, номер своего чата Джарвис подскажет при первом сообщении'
+    Готово 'токен записан: при запуске Джарвис назовёт код из шести цифр — отправь его боту'
 }
 $name = if ($Unattended) { $OwnerName } else { Read-Host '    Как к тебе обращаться? [хозяин]' }
 if ($name) {

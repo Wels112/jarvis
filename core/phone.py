@@ -19,7 +19,9 @@
 
 * Отвечаем только хозяину. Номер его чата лежит в настройках; любому другому
   бот говорит, что он личный, и больше ничего не делает. Без этого кто угодно,
-  нашедший бота, получил бы доступ к компьютеру.
+  нашедший бота, получил бы доступ к компьютеру. Хозяином становится тот, кто
+  пришлёт боту код, названный Джарвисом на компьютере: код знает только
+  сидящий рядом, а подобрать его не дадут — пять промахов, и чат не слушаем.
 
 * Опасное действие подтверждается там же, где спрошено: подтверждение с
   телефона не закрывает вопрос, заданный голосом, и наоборот.
@@ -29,6 +31,8 @@
   без отдельного приложения (sync_digest, команда /notes).
 """
 import io
+import json
+import secrets
 import threading
 import time
 
@@ -36,10 +40,13 @@ import requests
 
 from core import config, log
 
+CURRENT = None             # запущенный телефон — чтобы на «как подключить телефон» ответить кодом
+
 API = "https://api.telegram.org"
 POLL_TIMEOUT = 25          # длинный опрос: соединение висит, пока нет сообщений
 MAX_TEXT = 3900            # предел сообщения в Telegram — 4096, оставляем запас
 DIGEST_EVERY = 60          # сводку сверяем раз в минуту, правим — только если поменялась
+PAIR_TRIES = 5             # промахов с кодом привязки, после которых чат не слушаем
 
 
 class Phone:
@@ -59,6 +66,11 @@ class Phone:
         self._stop = threading.Event()
         self._thread = None
         self.me = ""
+        # Пока хозяин не известен — код привязки. Его называет Джарвис на
+        # компьютере, значит, знает только тот, кто рядом с ним. Раньше номер
+        # чата надо было вписывать в настройки руками — у клиента это тупик
+        self.pair_code = "" if self.owner else f"{secrets.randbelow(10 ** 6):06d}"
+        self._pair_fails = {}
 
     # ---------- связь ----------
     @property
@@ -89,9 +101,48 @@ class Phone:
             return "Telegram не ответил — проверь интернет и токен"
         self.me = me.get("username", "")
         if not self.owner:
-            return (f"бот @{self.me} на связи, но не знает хозяина. Напиши ему что угодно — "
-                    "он подскажет твой номер, впиши его в phone.owner_id")
+            return f"бот @{self.me} на связи и ждёт хозяина: отправь ему код {self.pair_code}"
         return f"бот @{self.me} на связи, хозяин {self.owner}"
+
+    @staticmethod
+    def status_phrase() -> str:
+        """Ответ на «как подключить телефон»: код, «уже подключён» или чего не хватает."""
+        p = CURRENT
+        if p is None:
+            return ("Телефон не настроен: нужен бот. Создай его у @BotFather командой /newbot "
+                    "и впиши токен в config/.env, строка TELEGRAM_BOT_TOKEN.")
+        if p.pair_code and not p.owner:
+            return p.pairing_hint()
+        return f"Телефон уже подключён — пиши боту{' @' + p.me if p.me else ''}."
+
+    def pairing_hint(self) -> str:
+        """Что сказать вслух при запуске, пока бот не знает хозяина."""
+        if not (self.available and self.pair_code):
+            return ""
+        name = f" @{self.me}" if self.me else ""
+        # Цифры через пробел — так их прочтут по одной, а не «четыреста восемьдесят…»
+        return f"Чтобы подключить телефон, отправь боту{name} код {' '.join(self.pair_code)}."
+
+    def _pair(self, chat: int):
+        """Код совпал: этот чат — хозяин. Запоминаем в настройках, код больше не действует."""
+        self.owner, self.pair_code = chat, ""
+        self.j.cfg.setdefault("phone", {})["owner_id"] = chat
+        try:
+            # Только одно поле: config.save записал бы в файл и все значения по умолчанию
+            path = config.CONFIG_FILE
+            raw = json.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
+            raw.setdefault("phone", {})["owner_id"] = chat
+            path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
+        except (OSError, ValueError) as e:
+            log.write("error", f"[телефон] не сохранил хозяина: {e}")
+        log.write("info", f"[телефон] привязан хозяин {chat}")
+        self.send("Готово: теперь я слушаюсь только тебя. Пиши или наговаривай — сделаю на "
+                  "компьютере. Дела и заметки закреплю здесь — их видно и без интернета.")
+        self.sync_digest()
+        try:
+            self.j.say("Телефон подключён.")
+        except Exception:
+            pass
 
     # ---------- отправка ----------
     def send(self, text: str, voice: bool = False, chat: int = 0):
@@ -261,16 +312,30 @@ class Phone:
             return ""
 
     def _stranger(self, chat: int):
-        self.send("Это личный ассистент, он отвечает только хозяину.\n"
-                  f"Если это ты — впиши номер {chat} в config/settings.json, "
-                  "раздел phone, поле owner_id.", chat=chat)
+        if self.pair_code and not self.owner:
+            # Подбирать код бессмысленно: пять промахов — и чат больше не слушаем
+            fails = self._pair_fails[chat] = self._pair_fails.get(chat, 0) + 1
+            if fails > PAIR_TRIES:
+                return
+            self.send("Это личный ассистент. Если это ты — отправь код, который Джарвис "
+                      "назвал на компьютере.", chat=chat)
+        else:
+            self.send("Это личный ассистент, он отвечает только хозяину.", chat=chat)
         log.write("info", f"[телефон] чужой чат {chat} — не отвечаю")
 
     def _handle(self, message: dict):
         chat = (message.get("chat") or {}).get("id", 0)
         if not chat:
             return
-        if not self.owner or chat != self.owner:
+        if not self.owner:
+            typed = (message.get("text") or "").replace(" ", "").strip()
+            if (self.pair_code and self._pair_fails.get(chat, 0) <= PAIR_TRIES
+                    and secrets.compare_digest(typed, self.pair_code)):
+                self._pair(chat)
+            else:
+                self._stranger(chat)
+            return
+        if chat != self.owner:
             self._stranger(chat)
             return
 
@@ -323,8 +388,10 @@ class Phone:
                     self.send("Споткнулся на этом. Посмотри журнал.")
 
     def start(self) -> bool:
+        global CURRENT
         if not self.available:
             return False
+        CURRENT = self
         self._thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._thread.start()
         threading.Thread(target=self._digest_loop, daemon=True).start()
