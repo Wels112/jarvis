@@ -93,6 +93,45 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} честный ответ не трогает: «{answer}»")
 
+    # Действие на словах без единого инструмента: «Уже нажимаю» (проверка 07.10.2026)
+    from core.honesty import unbacked_claim
+    for said, tools, want in (("Уже нажимаю.", 0, True), ("Открываю YouTube.", 0, True),
+                              ("Нажал.", 1, False), ("Не могу нажать — кнопки не вижу.", 0, False),
+                              ("Привет! Чем помочь?", 0, False), ("Сейчас включу.", 0, False)):
+        got = bool(unbacked_claim(said, tools))
+        errors += got != want
+        print(f"{'ok ' if got == want else 'НЕТ'} без инструмента «{said}» ({tools} вызовов): "
+              f"{'поймал' if got else 'молчит'}")
+
+    b = B.Brain(config.CFG)
+    clicked = []
+    b._run_tool = lambda name, args: clicked.append(name) or "Нажал «YouTube» в окне «Chrome»."
+    b._post = scripted({"text": "Уже нажимаю."},
+                       {"functionCall": {"name": "ui_click", "args": {"name": "YouTube"}}},
+                       {"text": "Нажал."})
+    answer = b.ask("Можешь моей мышкой нажать на YouTube?")
+    ok = clicked == ["ui_click"] and answer == "Нажал."
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} мозг: «Уже нажимаю» без вызова → дожал до инструмента: {clicked} «{answer}»")
+
+    # Живой режим: подозрение ждёт полторы секунды и снимается, если вызов пришёл
+    conv = L.LiveConversation.__new__(L.LiveConversation)
+    sent = []
+    conv.inject = lambda text: sent.append(text) or True
+    conv.turn_failures, conv.turn_tools, conv.unbacked = [], 0, None
+    conv.said_turn = "Открываю YouTube."
+    conv._flush_said()
+    waits = conv.unbacked is not None and not sent and not conv._check_unbacked()
+    conv.unbacked = (conv.unbacked[0], conv.unbacked[1] - 2)          # прошло 2 секунды
+    fired = conv._check_unbacked() and len(sent) == 1 and "не вызвал ни одного" in sent[0]
+    conv.said_turn = "Открываю YouTube."
+    conv._flush_said()
+    conv.unbacked = None                                            # пришёл вызов инструмента
+    quiet = not conv._check_unbacked() and len(sent) == 1
+    ok = waits and fired and quiet
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} живой режим: ждёт, потом просит; пришёл вызов — молчит")
+
     print(f"\nошибок: {errors}")
     return errors == 0
 

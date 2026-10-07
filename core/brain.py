@@ -65,6 +65,13 @@ HONESTY = """Про результат инструмента — закон:
   посмотри, потом отвечай.
 - Одно и то же средство дважды подряд не пробуй. Не вышло — либо другой инструмент,
   либо честно скажи, что этого не умеешь.
+
+Твои руки — ты управляешь компьютером почти как человек, не говори, что не умеешь:
+- «Нажми мышкой» — это ui_click по названию кнопки или ссылки.
+- Напечатать в программу («напиши в Claude …», «вбей в поиск …») — сначала
+  focus_window на её окно, потом type_text. «Claude», «Cloud Code» — программа на
+  компьютере, а не сайт. Enter type_text не нажимает — отправить просят отдельно.
+- Что написано в окне — ui_read; что там можно нажать — ui_elements.
 """
 
 # Закон отдельной константой: тот же текст берёт и живой режим (core/live.py).
@@ -147,8 +154,9 @@ class Brain:
         self._trim()
         turn_start = len(self.history) - 1       # откуда начался этот разговорный ход
 
-        from core.honesty import failed, false_claim
+        from core.honesty import failed, false_claim, unbacked_claim
         failures, nudged = [], False         # отказы инструментов в этом ходе — для сторожа честности
+        tools_called = 0                     # «нажимаю» без единого вызова — тоже неправда
         # До 10 витков: «посчитай кнопками 9 × 6» — это уже пять нажатий подряд, и
         # при прежних пяти витках на ответ хозяину места не оставалось (05.10.2026)
         for _ in range(10):
@@ -178,7 +186,7 @@ class Brain:
             calls = [p["functionCall"] for p in parts_out if "functionCall" in p]
             if not calls:
                 text = " ".join(p["text"] for p in parts_out if "text" in p).strip()
-                correction = false_claim(text, failures)
+                correction = false_claim(text, failures) or unbacked_claim(text, tools_called)
                 if correction and not nudged:
                     # «Сделал» вопреки отказу инструмента — один раз просим ответить честно
                     nudged = True
@@ -189,6 +197,7 @@ class Brain:
                 return text
 
             responses = []
+            tools_called += len(calls)
             for call in calls:
                 result = self._run_tool(call.get("name", ""), call.get("args", {}) or {})
                 if failed(result):

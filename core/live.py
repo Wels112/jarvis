@@ -56,7 +56,7 @@ MONTHS = ["января", "февраля", "марта", "апреля", "ма�
 
 # Сторож честности (core/honesty.py): инструмент отказал, а вслух прозвучало
 # «сделал» — просим поправиться тут же, тем же голосом
-from core.honesty import TOOL_FAILED, false_claim  # noqa: E402
+from core.honesty import TOOL_FAILED, false_claim, unbacked_claim  # noqa: E402
 
 PERSONA = """Ты — Джарвис, голосовой помощник. Вы с хозяином разговариваете вслух, по-человечески.
 
@@ -273,6 +273,8 @@ class LiveConversation:
         self.t_sent = None
         self.t_first_audio = None
         self.turn_failures = []
+        self.turn_tools = 0
+        self.unbacked = None
 
         # Свой постоянный цикл событий в фоновом потоке: подключение можно начать
         # заранее из потока ушей и подхватить, когда выяснится, что звали Джарвиса
@@ -452,6 +454,8 @@ class LiveConversation:
         self.user_turn = ""
         self.said_turn = ""
         self.turn_failures = []              # отказы инструментов в текущем ходе — для сторожа честности
+        self.turn_tools = 0                  # сколько инструментов вызвано в текущем ходе
+        self.unbacked = None                 # (фраза, когда) — «сделал» без вызова, ждёт проверки
         self.heard_since_pending = ""
         self.pending_since = None
         self.last_user_at = time.monotonic()
@@ -660,6 +664,7 @@ class LiveConversation:
                 return "shutdown"
             if getattr(self.j, "paused", False):
                 return "paused"
+            self._check_unbacked()
             speaking = self._player.busy
             if self.ending and not speaking:
                 await asyncio.sleep(0.3)
@@ -667,6 +672,16 @@ class LiveConversation:
             last = max(self.last_user_at, self._player.last_audio_at)
             if not speaking and time.monotonic() - last > self.idle_timeout:
                 return "idle"
+
+    def _check_unbacked(self, wait: float = 1.5) -> bool:
+        """«Открываю» без вызова инструмента и за полторы секунды вызов так и не пришёл —
+        просим поправиться. True — попросили."""
+        if not self.unbacked or time.monotonic() - self.unbacked[1] <= wait:
+            return False
+        said, self.unbacked = self.unbacked[0], None
+        log.write("info", f"честность: «{said[:60]}» без единого инструмента — прошу поправиться")
+        self.inject(unbacked_claim(said, 0))
+        return True
 
     # ---------- инструменты ----------
     async def _handle_tools(self, session, types, tool_call):
@@ -679,6 +694,9 @@ class LiveConversation:
                 result = await self._run_tool(fc.name, args)
             except Exception as e:
                 result = f"ошибка: {e}"
+            if fc.name != "end_conversation":
+                self.turn_tools += 1
+                self.unbacked = None             # слова подкреплены вызовом
             if fc.name not in ("end_conversation", "confirm_pending") and TOOL_FAILED.search(str(result)):
                 self.turn_failures.append((fc.name, str(result)[:160]))
             responses.append(types.FunctionResponse(
@@ -742,7 +760,12 @@ class LiveConversation:
             memory.log_dialog("jarvis", text)
         correction = false_claim(text, getattr(self, "turn_failures", []))
         if correction and not interrupted:
-            log.write("info", f"честность: сказал «{text[:60]}», а инструмент отказал — прошу поправиться")
+            log.write("info", f"честность: «{text[:60]}», а инструмент отказал — прошу поправиться")
             self.inject(correction)
+        elif not interrupted and unbacked_claim(text, getattr(self, "turn_tools", 0)):
+            # «Открываю» без вызова: ждём полторы секунды — вдруг вызов придёт следующим
+            # ходом; придёт — _handle_tools снимет подозрение, нет — попросим поправиться
+            self.unbacked = (text, time.monotonic())
         self.turn_failures = []
+        self.turn_tools = 0
         self.said_turn = ""

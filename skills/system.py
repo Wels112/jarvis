@@ -44,6 +44,8 @@ ALIASES = {
     "vs code": "visual studio code", "vscode": "visual studio code",
     "визуал студио код": "visual studio code", "код": "visual studio code",
     "клод": "claude", "клауд": "claude",
+    # «Напиши в поиске Cloud Code …» (05.10.2026): так распознаётся Claude Code
+    "cloud code": "claude", "клод код": "claude", "клауд код": "claude", "claude code": "claude",
     "настройки": "ms-settings:", "панель управления": "control",
     # Модели зовут программы по-английски, а в русской Windows они по-русски:
     # на проверке 05.10.2026 «Calculator» не нашёлся, хотя Калькулятор был открыт

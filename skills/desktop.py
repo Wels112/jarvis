@@ -180,10 +180,16 @@ def windows_report() -> str:
 
 
 def focus_window(name: str) -> str:
-    """Переключиться на окно по куску заголовка или имени программы."""
+    """Переключиться на окно по куску заголовка или имени программы.
+
+    Название берём и как сказано, и по синонимам программ: «Cloud Code» и «клод» —
+    это окно Claude (05.10.2026 модель не нашла его и полезла печатать в браузер).
+    """
+    from skills.system import _forms
     name = name.lower().strip()
+    forms = sorted(_forms(name), key=len, reverse=True)
     for hwnd, title, proc in list_windows(50):
-        if name in title.lower() or name in proc.lower():
+        if any(f in title.lower() or f in proc.lower() for f in forms):
             try:
                 if win32gui.IsIconic(hwnd):
                     win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
