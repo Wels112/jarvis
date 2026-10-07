@@ -285,6 +285,35 @@ def main():
         step_quiet = paired.morning_brief(now=next_day.replace(hour=8, minute=5)) is False \
             and len(pp.texts()) == 1                        # пустой день — ничего не шлёт
 
+        # Файлы с телефона — на компьютер; имена не затираются, «открой его» знает, что открыть
+        import shutil
+        from skills import files as F
+        paired.inbox = Path("D:/pytmp/test_inbox")
+        shutil.rmtree(paired.inbox, ignore_errors=True)
+        paired._download = lambda file_id: b"%PDF-1.4 test"
+        pp.clear()
+        paired._handle({"chat": {"id": OWNER}, "document": {"file_id": "x", "file_name": "договор.pdf",
+                                                            "file_size": 13}})
+        paired._handle({"chat": {"id": OWNER}, "document": {"file_id": "y", "file_name": "договор.pdf",
+                                                            "file_size": 13}})
+        paired._handle({"chat": {"id": OWNER}, "photo": [{"file_id": "s", "file_size": 5},
+                                                         {"file_id": "b", "file_size": 9}]})
+        paired._handle({"chat": {"id": OWNER}, "document": {"file_id": "z", "file_name": "фильм.mkv",
+                                                            "file_size": 900 * 2**20}})
+        saved = sorted(p.name for p in paired.inbox.iterdir())
+        replies = pp.texts()
+        step_files = (saved[:2] == ["договор (2).pdf", "договор.pdf"] and saved[2].startswith("фото_")
+                      and len(saved) == 3 and "Сохранил на компьютер" in replies[0]
+                      and "до 20 МБ" in replies[-1] and F.last(1) and F.last(1).endswith(".jpg"))
+        shutil.rmtree(paired.inbox, ignore_errors=True)
+
+        sent_cmds = []
+        paired._call = lambda method, _wait=20, _files=None, **p: sent_cmds.append((method, p)) or True
+        paired.register_commands()
+        step_menu = (sent_cmds and sent_cmds[0][0] == "setMyCommands"
+                     and '"notes"' in sent_cmds[0][1]["commands"])
+        paired._call = pp._call
+
         j.process("какие у меня задачи", from_voice=False)  # голосом (не из телефона)
         talk = memory.recent_talk()
         step_talk = ("Telegram] хозяин: напомни завтра в 10 купить хлеб" in talk
@@ -304,6 +333,8 @@ def main():
                      ("записанное с телефона не дублируется", step_no_dup),
                      ("утренний план: в 8:30 один раз, в 7:30 рано", step_brief),
                      ("пустой день — утром тишина", step_quiet),
+                     ("файлы с телефона: сохранены, не затёрты, больше 20 МБ — честно", step_files),
+                     ("меню команд бота", step_menu),
                      ("разговор общий: голос и Telegram с метками, своей модели — без него", step_talk)):
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} вместе: {name}")

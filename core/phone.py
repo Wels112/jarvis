@@ -32,6 +32,7 @@
 """
 import io
 import json
+import re
 import secrets
 import threading
 import time
@@ -88,6 +89,7 @@ POLL_TIMEOUT = 25          # длинный опрос: соединение в�
 MAX_TEXT = 3900            # предел сообщения в Telegram — 4096, оставляем запас
 DIGEST_EVERY = 60          # сводку сверяем раз в минуту, правим — только если поменялась
 PAIR_TRIES = 5             # промахов с кодом привязки, после которых чат не слушаем
+MAX_INCOMING = 20 * 2 ** 20    # больше бот скачать не может (ограничение Bot API)
 
 
 class Phone:
@@ -103,6 +105,8 @@ class Phone:
         self.pinned = cfg.get("pinned_digest", True)           # сводка заметок в закрепе
         self.confirm_tasks = cfg.get("confirm_tasks", True)    # «Записал: … — в 20:00» в чат
         self.brief_at = cfg.get("morning_brief", "08:00")      # план на день; "" — не присылать
+        from pathlib import Path
+        self.inbox = Path(cfg.get("inbox_dir") or Path.home() / "Downloads" / "Из телефона")
         self.token = config.env("TELEGRAM_BOT_TOKEN")
         self.session = requests.Session()
         self._offset = 0
@@ -477,6 +481,10 @@ class Phone:
             self._stranger(chat)
             return
 
+        if message.get("document") or message.get("photo") or message.get("video"):
+            self.send(self.save_incoming(message))
+            return
+
         was_voice = bool(message.get("voice") or message.get("audio"))
         if was_voice:
             self._call("sendChatAction", chat_id=chat, action="typing")
@@ -507,6 +515,57 @@ class Phone:
         self.mark_tasks_seen()      # записанное с телефона уже подтверждено ответом
         self.sync_digest()          # записал с телефона — закреп сразу свежий
 
+    def save_incoming(self, message: dict) -> str:
+        """Файл, фото или видео с телефона — на компьютер, в «Загрузки\\Из телефона».
+
+        Хозяин просил «скинь/достань мне файлы»: с компьютера на телефон это уже
+        было (send_file), теперь и обратно. Присланное становится «последним
+        найденным» — дальше «открой его» работает как после поиска файлов.
+        """
+        from datetime import datetime
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        if message.get("document"):
+            blob = message["document"]
+            name = blob.get("file_name") or f"файл_{stamp}"
+        elif message.get("video"):
+            blob = message["video"]
+            name = blob.get("file_name") or f"видео_{stamp}.mp4"
+        else:
+            blob = message["photo"][-1]                       # самое большое из размеров
+            name = f"фото_{stamp}.jpg"
+        size = int(blob.get("file_size") or 0)
+        if size > MAX_INCOMING:
+            return (f"Файл {size / 2**20:.0f} МБ — бот скачивает до 20 МБ. Перекинь его через облако "
+                    "или кабелем.")
+        data = self._download(blob.get("file_id", ""))
+        if not data:
+            return "Не смог скачать файл из Telegram — попробуй прислать ещё раз."
+        safe = re.sub(r'[\\/:*?"<>|]+', "_", name).strip(" .") or f"файл_{stamp}"
+        self.inbox.mkdir(parents=True, exist_ok=True)
+        path, n = self.inbox / safe, 2
+        while path.exists():                                  # чужой файл с тем же именем не затираем
+            stem, dot, ext = safe.rpartition(".")
+            path = self.inbox / (f"{stem} ({n}).{ext}" if dot else f"{safe} ({n})")
+            n += 1
+        path.write_bytes(data)
+        log.write("info", f"[телефон] принят файл {path.name} ({len(data) // 1024} КБ)")
+        try:
+            from core import memory
+            from skills import files as F
+            F._last, F.last_at = [(path.name, str(path), time.time())], time.time()
+            memory.log_dialog("user", f"(прислал с телефона файл {path.name})", via="Telegram")
+        except Exception:
+            pass
+        return f"Сохранил на компьютер: {path}. Скажи «открой его» — открою."
+
+    def register_commands(self):
+        """Меню «/» в чате с ботом: что можно нажать, не вспоминая слова."""
+        self._call("setMyCommands", commands=json.dumps([
+            {"command": "tasks", "description": "Мои дела"},
+            {"command": "notes", "description": "Закрепить свежую сводку дел и заметок"},
+            {"command": "help", "description": "Что умеет Джарвис"},
+        ], ensure_ascii=False))
+
     def _poll_loop(self):
         while not self._stop.is_set():
             updates = self._call("getUpdates", _wait=POLL_TIMEOUT + 10,
@@ -531,6 +590,7 @@ class Phone:
         if not self.available:
             return False
         CURRENT = self
+        threading.Thread(target=self.register_commands, daemon=True).start()
         self._thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._thread.start()
         threading.Thread(target=self._digest_loop, daemon=True).start()
