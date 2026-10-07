@@ -226,7 +226,9 @@ def prepare_send(name: str, text: str):
     «Мамин клуб» — подтверждение должно относиться ровно к тому, что случится.
     """
     if not ready():
-        return None, NOT_CONNECTED
+        # Без входа в личный Telegram — через приложение на компьютере, только в открытый чат
+        from skills import tg_desktop
+        return tg_desktop.prepare(name, text)
     try:
         found = _run(_resolve(name))
     except Exception as e:

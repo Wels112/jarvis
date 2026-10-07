@@ -76,8 +76,9 @@ def connected_hint() -> str:
     try:
         from skills import telegram as TG
         if not TG.ready():
-            text += (" Личный Telegram хозяина (его чаты с людьми) не подключён — это другое, "
-                     "читать и писать людям пока нельзя.")
+            text += (" Личный Telegram хозяина (его чаты с людьми) не подключён — это другое: "
+                     "читать чаты нельзя, а написать человеку можно только в чат, открытый сейчас "
+                     "в Telegram на компьютере (telegram_send сам проверит и спросит).")
     except Exception:
         pass
     return text
