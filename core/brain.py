@@ -790,8 +790,20 @@ def _t_clean(b):
     return CL.clean()
 
 
+def _t_uninstall(b, name: str):
+    """Удаление программы — только через подтверждение, и деинсталлятор спросит ещё раз."""
+    from skills import programs as PR
+    desc, action = PR.prepare(name)
+    if desc is None:
+        return action
+    b.pending_confirm = (desc, action)
+    return (f"ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ: {desc}. Назови хозяину программу и сколько она занимает, "
+            "спроси «удалить?». После «да» откроется окно удаления — там он подтвердит ещё раз.")
+
+
 TOOL_IMPL.update({
     "disk_space": _t_disk, "clean_preview": _t_clean_preview, "clean_disk": _t_clean,
+    "uninstall_app": _t_uninstall,
 })
 
 TOOLS += [
@@ -805,6 +817,12 @@ TOOLS += [
                      "попросили почистить, не спрашивая заранее: инструмент сам вернёт запрос "
                      "на подтверждение, и только тогда спроси хозяина."),
      "parameters": _p()},
+    {"name": "uninstall_app",
+     "description": ("Удалить установленную программу или игру — как через «Установку и удаление "
+                     "программ» (игру Steam — через Steam). Вызывай сразу: инструмент найдёт её и "
+                     "вернёт запрос на подтверждение с названием и размером. Не удаляй программы "
+                     "через powershell."),
+     "parameters": _p(name={"type": "string", "description": "название программы или игры"})},
 ]
 
 

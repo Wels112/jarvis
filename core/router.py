@@ -279,6 +279,16 @@ def handle(text: str, cfg: dict) -> Reply:
     if re.search(r"предыдущ(ий|ая) (трек|песня|песню)|назад трек", t):
         return Reply(say=S.media_key("prev"))
 
+    # --- удалить программу или игру: только со словом «программу/игру» ---
+    m = re.search(r"^(?:удали|удалить|снеси|деинсталлируй)\s+(?:программу|игру|приложение)\s+(.+)$", t)
+    if m:
+        from skills import programs as PR
+        desc, action = PR.prepare(m.group(1))
+        if desc is None:
+            return Reply(say=action)
+        return Reply(say=f"{desc[0].upper()}{desc[1:]}? Откроется окно удаления — там подтвердишь "
+                         "ещё раз. Скажи «да».", pending=action, pending_desc=desc)
+
     # --- телефон: код привязки, если прослушал его при запуске ---
     if re.search(r"(подключ|привяз)\w*\s+(\w+\s+)?(телефон|бот)\w*|код\s+(для\s+|привязки\s+)?(телефон|бот)\w*", t):
         from core.phone import Phone
