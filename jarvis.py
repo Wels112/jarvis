@@ -64,6 +64,7 @@ class Jarvis:
         self.live = None               # живой разговор, поднимается в голосовом режиме
         self.live_request = False      # Ctrl+Alt+J — открыть разговор без имени
         self.live_off_until = 0.0      # пауза после сбоя живого режима
+        self._vpn_told = 0.0           # когда говорил, что Gemini не пускает без VPN
         log.cleanup()                  # журналы старше двух недель ни к чему
         self._init_brain()
 
@@ -218,6 +219,11 @@ class Jarvis:
         # не сказала — отвечаем по-старому, чтобы просьба не пропала.
         self.live_off_until = time.time() + LIVE_COOLDOWN
         print(f"[живой разговор] недоступен 10 минут: {result[:160]}")
+        # Gemini не пускает из России без VPN (1007, 06.10.2026). Джарвис молча
+        # становился «глупее» — пусть скажет почему, не чаще раза в полчаса
+        if "location is not supported" in result.lower() and time.time() - self._vpn_told > 1800:
+            self._vpn_told = time.time()
+            self.say("Gemini не пускает из этой страны — похоже, выключен VPN. Пока отвечаю сам, попроще.")
         if self.live.t_first_audio is not None:
             return True
         if audio is None:
@@ -225,6 +231,10 @@ class Jarvis:
             self.say("Да?")
             return True
         text = self.ears.transcribe(audio)
+        # По имени уже позвали — это и открыло разговор. Вторая расшифровка
+        # может исказить имя («Джарус»), и без открытого окна просьба молча
+        # отбрасывалась бы как сказанная не Джарвису
+        self.awake_until = time.time() + DIALOG_WINDOW
         return self.process(text, from_voice=True) if text else True
 
     def _on_speech_start(self):
