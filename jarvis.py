@@ -67,6 +67,41 @@ def _mark_announced(key: str):
         pass
 
 
+def ring_phrase(t: dict) -> str:
+    """Звонок будильника. Со временем: в телефоне сообщение читают позже, чем оно пришло."""
+    from datetime import datetime
+    if t.get("timer"):
+        return "Время вышло."
+    return f"Напоминаю: {t['text']} — {datetime.fromisoformat(t['when']):%H:%M}."
+
+
+def late_phrases(late: list, at_start: bool, now=None) -> list:
+    """Что сказать про напоминания, проскочившие окно будильника.
+
+    При запуске — одной фразой «пока меня не было». На ходу опоздание в пару
+    минут (круг будильника затянулся) звонит как обычно, а большое значит, что
+    компьютер спал: так и сказать, иначе «Напоминаю: в 19:50» в девять вечера
+    звучит как ошибка.
+
+    Пары (фраза, задача): задача — для кнопок «Сделано/отложить» в телефоне;
+    у сводки про несколько дел её нет — кнопки были бы непонятно к чему.
+    """
+    from datetime import datetime
+    now = now or datetime.now()
+    when = lambda t: datetime.fromisoformat(t["when"])
+    out = []
+    if not at_start:
+        out = [(ring_phrase(t), t) for t in late if (now - when(t)).total_seconds() < 600]
+        late = [t for t in late if (now - when(t)).total_seconds() >= 600]
+    if late:
+        parts = [f"{t['text']} — {memory.when_phrase(when(t))}" for t in late[:3]]
+        more = f" И ещё {len(late) - 3}." if len(late) > 3 else ""
+        lead = ("Пока меня не было, ты просил напомнить" if at_start
+                else "Опоздал: компьютер, похоже, спал. Ты просил напомнить")
+        out.append((f"{lead}: {'; '.join(parts)}.{more}", late[0] if len(late) == 1 else None))
+    return out
+
+
 class Jarvis:
     def __init__(self, voice_mode: bool = True):
         self.cfg = config.CFG
@@ -173,12 +208,16 @@ class Jarvis:
             print(f"[диск] замер не идёт: {e}")
 
     # ---------- речь ----------
-    def say(self, text: str):
+    def say(self, text: str, aloud: bool = False):
+        """aloud — вслух, даже пока отвечаем телефону. Тишина на время запроса с
+        телефона общая для всех потоков, и напоминание, прозвеневшее в эти
+        секунды, уходило в чужой ответ в чат, а в комнате молчало."""
         if not text:
             return
-        memory.log_dialog("jarvis", text, via="Telegram" if self._quiet else "голос")
+        quiet = self._quiet and not aloud
+        memory.log_dialog("jarvis", text, via="Telegram" if quiet else "голос")
         log.said(text)
-        if self._quiet:
+        if quiet:
             self._answer.append(text)     # спросили с телефона: ответ уходит в чат
             return
         self.voice.say(text)
@@ -206,19 +245,20 @@ class Jarvis:
                 self._answer = []
         return answer
 
-    def notify(self, text: str):
+    def notify(self, text: str, task: dict = None):
         """Сказать от себя: посреди живого разговора — голосом модели, иначе обычным.
 
         Напоминание не должно перебивать разговор чужим голосом: оно встраивается
-        в сам разговор, и модель передаёт его своими словами.
+        в сам разговор, и модель передаёт его своими словами. task — задача, о
+        которой напоминаем: в телефоне под ней будут кнопки «Сделано» и «отложить».
         """
         if self.phone:
-            self.phone.notify(text)       # дома может никого не быть — пусть дойдёт в телефон
+            self.phone.notify(text, task)  # дома может никого не быть — пусть дойдёт в телефон
         if self.live and self.live.active:
             if self.live.inject(f"(Система напоминаний, не хозяин: передай ему своими словами — {text})"):
                 log.write("info", f"напоминание в разговор: {text}")
                 return
-        self.say(text)
+        self.say(text, aloud=True)        # в телефон уже ушло выше
 
     # ---------- живой разговор ----------
     def _live_ready(self) -> bool:
@@ -400,7 +440,7 @@ class Jarvis:
                                   daemon=True)
         worker.start()
         worker.join(FILLER_AFTER)
-        if worker.is_alive():
+        if worker.is_alive() and not self._quiet:     # в чате «Секунду.» перед ответом — лишнее
             self.say("Секунду.")
             worker.join()
         return result.get("a") or "Не получилось ответить."
@@ -475,39 +515,33 @@ class Jarvis:
             _mark_announced("today")
             self.say("Из плана: " + "; ".join(bits) + ".")
 
-    def _tell_overdue(self):
-        """Сказать про напоминания, которые прозвенели бы без меня."""
-        from datetime import datetime
+    def _tell_overdue(self, at_start: bool = False):
+        """Сказать про напоминания, которые прозвенели бы без меня.
+
+        Через notify, а не say: Джарвиса включили, а хозяина дома может и не быть.
+        """
         try:
             late = memory.overdue()
         except Exception as e:
             print(f"[будильник] просроченные: {e}")
             return
-        if not late:
-            return
-        parts = [f"{t['text']} — {memory.when_phrase(datetime.fromisoformat(t['when']))}"
-                 for t in late[:3]]
-        more = f" И ещё {len(late) - 3}." if len(late) > 3 else ""
-        self.say(f"Пока меня не было, ты просил напомнить: {'; '.join(parts)}.{more}")
+        for text, task in late_phrases(late, at_start):
+            self.notify(text, task)
 
     def _reminder_loop(self):
         # 10 секунд, а не 30: таймер, опоздавший на полминуты, уже бесполезен
-        from datetime import datetime
         from skills import lessons
         self.voice.wait()                 # сначала поздороваться, потом докладывать
-        self._tell_overdue()
+        self._tell_overdue(at_start=True)
         self._tell_today()
         while self.running:
             try:
                 for t in memory.due_now(window_min=0.2):
-                    if t.get("timer"):
-                        self.notify("Время вышло.")
-                    else:
-                        # С временем: в телефоне сообщение читают позже, чем оно пришло
-                        at = datetime.fromisoformat(t["when"])
-                        self.notify(f"Напоминаю: {t['text']} — {at:%H:%M}.")
+                    self.notify(ring_phrase(t), t)
             except Exception as e:
                 print(f"[будильник] {e}")
+            # Срок проскочил окно: компьютер спал или круг затянулся
+            self._tell_overdue()
 
             try:
                 # Урок начинается — предупредить заранее, чтобы успеть открыть доску

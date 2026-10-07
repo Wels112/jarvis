@@ -278,6 +278,15 @@ def add_task(text: str, when_text: str = "") -> str:
     # по основе слова, иначе «в пятницу» не совпадёт с «пятница»
     clean = re.sub(r"\b(в|во)\s+(" + "|".join(w[:5] for w in WEEKDAYS) + r")\w*", "", clean, flags=re.I)
     clean = re.sub(r"\s+", " ", clean).strip(" ,.") or text
+    # Сразу после звонка «напомни ещё раз через 10 минут» — про то, что прозвенело.
+    # Раньше это записывало новое дело с текстом «еще раз». Тот же текст, что у
+    # прозвеневшего (модель повторяет его сама), — тоже перенос, а не второе дело
+    last = last_rung()
+    if clean.lower().replace("ё", "е") in AGAIN or (last and clean.lower() == last["text"].lower()):
+        if not last:
+            return "Не помню недавнего напоминания. Скажи, о чём напомнить."
+        minutes = (when - datetime.now()).total_seconds() / 60 if when else 10
+        return snooze(last["id"], max(1, minutes))
     tasks.append({
         "id": int(datetime.now().timestamp()),
         "text": clean,
@@ -391,6 +400,11 @@ def list_tasks(when: str = "today") -> str:
 
 
 def complete_task(query: str) -> str:
+    # «готово, отметь выполненным» сразу после звонка — про прозвеневшее дело
+    q = re.sub(r"^(?:отметь|это|как)\s+", "", query.lower().strip(" ,.")).replace("ё", "е")
+    if q in DONE_WORDS:
+        last = last_rung()
+        return finish(last["id"]) if last else "Какое дело отметить? Назови его."
     tasks = _load(TASKS, [])
     for t in tasks:
         if not t["done"] and query.lower() in t["text"].lower():
@@ -398,6 +412,57 @@ def complete_task(query: str) -> str:
             _save(TASKS, tasks)
             return f"Отметил выполненным: {t['text']}."
     return "Не нашёл такую задачу."
+
+
+# Слова вместо дела: так говорят сразу после напоминания, имея в виду его
+AGAIN = {"еще раз", "снова", "опять", "это", "об этом", "про это", "попозже", "позже",
+         "еще раз об этом", "об этом еще раз", "про это еще раз"}
+DONE_WORDS = {"", "это", "его", "ее", "уже", "выполненным", "сделанным", "выполнено", "сделано",
+              "последнее", "напоминание"}
+
+
+def last_rung(within_min: int = 20, now: datetime = None):
+    """Напоминание, которое только что прозвенело и ещё не закрыто.
+
+    К нему относятся «отложи на 15 минут», «напомни ещё раз через 10 минут» и
+    «готово» сразу после звонка: хозяин не повторяет, о каком деле речь.
+    """
+    now = now or datetime.now()
+    best = None
+    for t in _load(TASKS, []):
+        if t["done"] or t.get("timer") or not t.get("rung"):
+            continue
+        if 0 <= (now - datetime.fromisoformat(t["rung"])).total_seconds() <= within_min * 60:
+            if best is None or t["rung"] > best["rung"]:
+                best = t
+    return best
+
+
+def finish(task_id: int) -> str:
+    """Кнопка «Сделано» под напоминанием в Telegram — задача по номеру, не по словам."""
+    tasks = _load(TASKS, [])
+    for t in tasks:
+        if t.get("id") == task_id and not t["done"]:
+            t["done"] = True
+            _save(TASKS, tasks)
+            return f"Отметил выполненным: {t['text']}."
+    return "Это напоминание уже закрыто."
+
+
+def snooze(task_id: int, minutes: int, now: datetime = None) -> str:
+    """Кнопка «+15 мин» под напоминанием: тот же срок заново, отметку «прозвенело» снять."""
+    tasks = _load(TASKS, [])
+    for t in tasks:
+        if t.get("id") == task_id and not t["done"]:
+            now = now or datetime.now()
+            when = now + timedelta(minutes=minutes)
+            t["when"] = when.isoformat(timespec="seconds")
+            t.pop("fired", None)
+            t.pop("rung", None)
+            _save(TASKS, tasks)
+            at = f"в {when:%H:%M}" if when.date() == now.date() else when_phrase(when)
+            return f"Отложил: {t['text']} — напомню {at}."
+    return "Это напоминание уже закрыто."
 
 
 def due_now(window_min: int = 1):
@@ -411,7 +476,7 @@ def due_now(window_min: int = 1):
             continue
         when = datetime.fromisoformat(t["when"])
         if 0 <= (now - when).total_seconds() < window_min * 60 + 30:
-            t["fired"] = True
+            t["fired"], t["rung"] = True, now.isoformat(timespec="seconds")
             fired.append(t)
             changed = True
     if changed:
@@ -427,7 +492,7 @@ def when_phrase(when: datetime) -> str:
     return f"{day} в {when:%H:%M}"
 
 
-def overdue(max_age_h: int = 72):
+def overdue(max_age_h: int = 72, min_age_s: int = 45):
     """Напоминания, которые прозвенели бы, пока Джарвис был выключен.
 
     Будильник смотрит узкое окно вокруг «сейчас». Если в ту минуту Джарвиса не
@@ -435,17 +500,26 @@ def overdue(max_age_h: int = 72):
     отметки «прозвенело» нет — и больше о нём никто не вспоминал. Такое нужно
     отдать при запуске, честно сказав, что оно просрочено.
 
-    Таймеры пропускаются: вчерашний кухонный таймер — уже не новость.
+    То же бывает и на ходу: компьютер уснул в 19:50 и проснулся в 21:00 — окно
+    будильника срок проскочил, а при запуске его уже проверили. Поэтому
+    будильник зовёт это в каждом круге. min_age_s начинается сразу за окном
+    due_now (0.2 мин + 30 с): раньше между ними была щель, и срок, проскочивший
+    окно на полминуты, не подбирал никто.
+
+    Таймеры — только свежие: опоздавший на минуту ещё нужен, вчерашний кухонный
+    таймер — уже не новость.
     """
     now = datetime.now()
     tasks = _load(TASKS, [])
     late, changed = [], False
     for t in tasks:
-        if t["done"] or not t["when"] or t.get("fired") or t.get("timer"):
+        if t["done"] or not t["when"] or t.get("fired"):
             continue
         age = (now - datetime.fromisoformat(t["when"])).total_seconds()
-        if 90 <= age <= max_age_h * 3600:
-            t["fired"] = True
+        if t.get("timer") and age > 600:
+            continue
+        if min_age_s <= age <= max_age_h * 3600:
+            t["fired"], t["rung"] = True, now.isoformat(timespec="seconds")
             late.append(t)
             changed = True
     if changed:

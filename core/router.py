@@ -60,6 +60,16 @@ def _num(text: str, default=None):
     return default
 
 
+def _snooze_minutes(t: str, default: int = 10) -> int:
+    """«на 15 минут» → 15, «на час» → 60, «на полчаса» → 30, без срока — 10."""
+    if "полчаса" in t:
+        return 30
+    m = re.search(r"(\d+)\s*(мин|час)", t)
+    if m:
+        return int(m.group(1)) * (60 if m.group(2) == "час" else 1)
+    return 60 if re.search(r"\bчас", t) else default
+
+
 def normalize(text: str) -> str:
     t = text.lower().strip()
     t = t.replace("ё", "е")
@@ -566,6 +576,13 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.sleep_pc())
 
     # --- задачи и график ---
+    # Сразу после звонка: «отложи на 15 минут», «готово» — про то, что прозвенело.
+    # Нет недавнего напоминания — не наше, пусть разбирается модель
+    if re.fullmatch(r"отложи(?: напоминание| это| его)?(?: (?:на|через) .+)?", t) and memory.last_rung():
+        return Reply(say=memory.snooze(memory.last_rung()["id"], _snooze_minutes(t)))
+    if (re.fullmatch(r"(?:я )?(?:сделал|сделала|сделано|готово|выполнено|выполнил|выполнила)(?: (?:это|уже))?", t)
+            and memory.last_rung()):
+        return Reply(say=memory.finish(memory.last_rung()["id"]))
     m = re.search(r"^(?:напомни|напомнить|поставь задачу|добавь задачу|запланируй)\s+(?:мне\s+)?(.+)$", t)
     if m:
         return Reply(say=memory.add_task(m.group(1), m.group(1)))

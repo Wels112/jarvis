@@ -90,6 +90,16 @@ MAX_TEXT = 3900            # предел сообщения в Telegram — 409
 DIGEST_EVERY = 60          # сводку сверяем раз в минуту, правим — только если поменялась
 PAIR_TRIES = 5             # промахов с кодом привязки, после которых чат не слушаем
 MAX_INCOMING = 20 * 2 ** 20    # больше бот скачать не может (ограничение Bot API)
+SNOOZE = ((15, "+15 мин"), (60, "+1 час"))     # «отложить» под напоминанием
+
+
+def reminder_buttons(task_id: int) -> dict:
+    """Кнопки под напоминанием в Telegram. В данных кнопки — номер задачи, а не
+    её текст: слова могут совпасть у двух дел, номер — нет."""
+    row = [{"text": "✅ Сделано", "callback_data": f"done:{task_id}"}]
+    row += [{"text": f"⏰ {label}", "callback_data": f"snooze:{task_id}:{minutes}"}
+            for minutes, label in SNOOZE]
+    return {"inline_keyboard": [row]}
 
 
 class Phone:
@@ -260,10 +270,47 @@ class Phone:
             return f"Не смог отправить {os.path.basename(path)} — Telegram не принял."
         return f"Отправил {os.path.basename(path)} тебе в Telegram."
 
-    def notify(self, text: str):
-        """Напоминание или предупреждение — в телефон, если так настроено."""
-        if self.push and self.available and self.owner:
-            self.send(text)
+    def notify(self, text: str, task: dict = None):
+        """Напоминание или предупреждение — в телефон, если так настроено.
+
+        Под напоминанием из дел — кнопки «Сделано» и «отложить»: на «в 20:00
+        ученик» ответить нажатием проще, чем набирать «отложи на час».
+        """
+        if not (self.push and self.available and self.owner):
+            return
+        if task and task.get("id") and not task.get("timer"):
+            if self._call("sendMessage", chat_id=self.owner, text=text,
+                          reply_markup=json.dumps(reminder_buttons(task["id"]),
+                                                  ensure_ascii=False)) is not None:
+                return
+            # Кнопки не прошли — напоминание всё равно должно дойти
+        self.send(text)
+
+    def _handle_button(self, query: dict):
+        """Нажата кнопка под напоминанием: отметить сделанным или отложить."""
+        message = query.get("message") or {}
+        chat = (message.get("chat") or {}).get("id", 0)
+        who = (query.get("from") or {}).get("id", 0)
+        if not self.owner or who != self.owner or chat != self.owner:
+            self._call("answerCallbackQuery", callback_query_id=query.get("id", ""),
+                       text="Это личный ассистент.")
+            return
+        from core import memory
+        m = re.fullmatch(r"(done|snooze):(\d+)(?::(\d+))?", query.get("data") or "")
+        if not m:
+            self._call("answerCallbackQuery", callback_query_id=query.get("id", ""),
+                       text="Эта кнопка устарела.")
+            return
+        task_id, minutes = int(m.group(2)), min(int(m.group(3) or 0), 24 * 60)
+        result = memory.finish(task_id) if m.group(1) == "done" else memory.snooze(task_id, minutes)
+        self._call("answerCallbackQuery", callback_query_id=query.get("id", ""), text=result[:190])
+        if message.get("message_id"):
+            # Правка без reply_markup убирает кнопки: второй раз не нажмут
+            mark = "✅" if m.group(1) == "done" else "⏰"
+            self._call("editMessageText", chat_id=chat, message_id=message["message_id"],
+                       text=f"{message.get('text', '')}\n{mark} {result}")
+        log.write("info", f"[телефон] кнопка: {result}")
+        self.sync_digest()
 
     # ---------- закреплённая сводка ----------
     def sync_digest(self, renew: bool = False) -> bool:
@@ -570,13 +617,19 @@ class Phone:
         while not self._stop.is_set():
             updates = self._call("getUpdates", _wait=POLL_TIMEOUT + 10,
                                  offset=self._offset, timeout=POLL_TIMEOUT,
-                                 allowed_updates='["message"]')
+                                 allowed_updates='["message","callback_query"]')
             if updates is None:
                 time.sleep(5)                         # связь дрогнула — не долбим
                 continue
             for upd in updates:
                 self._offset = upd["update_id"] + 1
                 message = upd.get("message")
+                if upd.get("callback_query"):
+                    try:
+                        self._handle_button(upd["callback_query"])
+                    except Exception as e:
+                        log.write("error", f"[телефон] кнопка: {type(e).__name__} {str(e)[:90]}")
+                    continue
                 if not message:
                     continue
                 try:

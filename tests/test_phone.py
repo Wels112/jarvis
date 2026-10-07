@@ -126,6 +126,20 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} напоминание пришло и в телефон, и вслух")
 
+    # Напоминание прозвенело, пока Джарвис отвечает телефону: вслух, а не в чужой ответ
+    fake.clear()
+    spoken.clear()
+    j._quiet, j._answer = True, []
+    try:
+        j.notify("Напоминаю: полить цветы.")
+    finally:
+        stolen, j._quiet, j._answer = j._answer, False, []
+    ok = (any("цветы" in s for s in spoken) and not stolen
+          and sum("цветы" in t for t in fake.texts()) == 1)
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} напоминание во время ответа телефону: вслух и одно в чат, "
+          f"в ответ не прилипло ({stolen or 'пусто'})")
+
     # 7. Закреплённая сводка: одно сообщение, правится на месте, только при изменениях
     from core import memory
     phone.pinned = True
@@ -314,6 +328,53 @@ def main():
                      and '"notes"' in sent_cmds[0][1]["commands"])
         paired._call = pp._call
 
+        # Кнопки под напоминанием: «Сделано» и «отложить» — по номеру задачи и только хозяину
+        btn, markup_ok = [], [True]
+
+        def bcall(method, _wait=20, _files=None, **p):
+            btn.append((method, p))
+            if method == "sendMessage" and "reply_markup" in p and not markup_ok[0]:
+                return None
+            return {"message_id": 5} if method == "sendMessage" else True
+        paired._call, paired.pinned = bcall, False
+        memory._save(memory.TASKS, [{"id": 7, "text": "ученик", "when": "2026-10-07T20:00",
+                                     "done": False, "fired": True, "created": ""}])
+        paired.notify("Напоминаю: ученик — 20:00.", {"id": 7, "text": "ученик"})
+        markup = json.loads(btn[0][1].get("reply_markup", "{}")) if btn else {}
+        datas = [b["callback_data"] for b in (markup.get("inline_keyboard") or [[]])[0]]
+        step_btn_sent = datas == ["done:7", "snooze:7:15", "snooze:7:60"]
+        btn.clear()
+        paired.notify("Время вышло.", {"id": 8, "text": "таймер", "timer": True})
+        markup_ok[0] = False
+        paired.notify("Напоминаю: ученик — 20:00.", {"id": 7, "text": "ученик"})
+        step_btn_plain = ([("reply_markup" in p) for m, p in btn] == [False, True, False]
+                          and btn[-1][1]["text"] == "Напоминаю: ученик — 20:00.")
+
+        msg = {"message_id": 5, "chat": {"id": OWNER}, "text": "Напоминаю: ученик — 20:00."}
+        btn.clear()
+        paired._handle_button({"id": "q0", "from": {"id": STRANGER}, "data": "done:7",
+                               "message": {"message_id": 5, "chat": {"id": STRANGER}}})
+        step_btn_stranger = (not memory._load(memory.TASKS, [])[0]["done"]
+                             and [m for m, _ in btn] == ["answerCallbackQuery"])
+        btn.clear()
+        before = datetime.now()
+        paired._handle_button({"id": "q1", "from": {"id": OWNER}, "message": msg, "data": "snooze:7:15"})
+        t = memory._load(memory.TASKS, [])[0]
+        later = (datetime.fromisoformat(t["when"]) - before).total_seconds()
+        edits = [p for m, p in btn if m == "editMessageText"]
+        step_btn_snooze = (not t.get("fired") and 14 * 60 <= later <= 16 * 60 and len(edits) == 1
+                           and "⏰ Отложил: ученик — напомню в" in edits[0]["text"]
+                           and "reply_markup" not in edits[0])                 # кнопки убраны
+        btn.clear()
+        paired._handle_button({"id": "q2", "from": {"id": OWNER}, "message": msg, "data": "done:7"})
+        answer = [p.get("text", "") for m, p in btn if m == "answerCallbackQuery"]
+        btn.clear()
+        paired._handle_button({"id": "q3", "from": {"id": OWNER}, "message": msg, "data": "done:7"})
+        again = [p.get("text", "") for m, p in btn if m == "answerCallbackQuery"]
+        step_btn_done = (memory._load(memory.TASKS, [])[0]["done"]
+                         and answer == ["Отметил выполненным: ученик."] and again == ["Это напоминание уже закрыто."])
+        paired._call, paired.pinned = pp._call, True
+
         j.process("какие у меня задачи", from_voice=False)  # голосом (не из телефона)
         talk = memory.recent_talk()
         step_talk = ("Telegram] хозяин: напомни завтра в 10 купить хлеб" in talk
@@ -335,6 +396,11 @@ def main():
                      ("пустой день — утром тишина", step_quiet),
                      ("файлы с телефона: сохранены, не затёрты, больше 20 МБ — честно", step_files),
                      ("меню команд бота", step_menu),
+                     ("под напоминанием кнопки «Сделано», «+15 мин», «+1 час»", step_btn_sent),
+                     ("таймер без кнопок; кнопки не прошли — напоминание всё равно дошло", step_btn_plain),
+                     ("чужая кнопка ничего не делает", step_btn_stranger),
+                     ("«+15 мин»: позвонит снова через 15 минут, кнопки убраны", step_btn_snooze),
+                     ("«Сделано»: отмечено, повторное нажатие — «уже закрыто»", step_btn_done),
                      ("разговор общий: голос и Telegram с метками, своей модели — без него", step_talk)):
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} вместе: {name}")
