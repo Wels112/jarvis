@@ -76,7 +76,6 @@
     padding: 0 24px 96px;
   }
 
-  /* ---------- шапка ---------- */
   header {
     padding: 72px 0 40px;
     border-bottom: 1px solid var(--line);
@@ -110,7 +109,6 @@
     margin: 0;
   }
 
-  /* ---------- строка состояния ---------- */
   .status {
     display: flex;
     flex-wrap: wrap;
@@ -139,7 +137,6 @@
   .dot.on   { background: var(--local); box-shadow: 0 0 0 3px var(--local-soft); }
   .dot.wait { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-  /* ---------- секции ---------- */
   section { padding-top: 56px; }
 
   h2 {
@@ -156,11 +153,10 @@
     max-width: 62ch;
   }
 
-  /* ---------- два шага ---------- */
   .steps {
     display: grid;
     gap: 14px;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   }
 
   .step {
@@ -190,18 +186,18 @@
   }
 
   .step p { margin: 0; color: var(--ink-soft); font-size: 14.5px; }
+  .step a { color: var(--accent); }
 
-  .step code, .inline-code {
+  .inline-code {
     font-family: "JetBrains Mono", monospace;
     font-size: 12.5px;
     background: var(--surface-alt);
     padding: 2px 6px;
     border-radius: 5px;
     color: var(--ink);
-    word-break: break-all;
+    word-break: break-word;
   }
 
-  /* ---------- группы команд ---------- */
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -233,7 +229,7 @@
   .groups {
     display: grid;
     gap: 16px;
-    grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr));
   }
 
   .group {
@@ -250,6 +246,17 @@
     font-weight: 600;
     margin: 0 0 14px;
     letter-spacing: -.005em;
+  }
+
+  .group h3 .new {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--local);
+    margin-left: 6px;
+    vertical-align: 2px;
   }
 
   .cmd {
@@ -277,11 +284,10 @@
     line-height: 1.45;
   }
 
-  /* ---------- схема ---------- */
   .flow {
     display: grid;
     gap: 14px;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr));
     margin-bottom: 18px;
   }
 
@@ -291,8 +297,9 @@
     padding: 18px 20px;
     background: var(--surface);
   }
-  .lane.first { border-left: 3px solid var(--local); }
+  .lane.first  { border-left: 3px solid var(--local); }
   .lane.second { border-left: 3px solid var(--accent); }
+  .lane.third  { border-left: 3px solid var(--ink-soft); }
 
   .lane h4 {
     margin: 0 0 4px;
@@ -309,7 +316,6 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* ---------- запуск ---------- */
   .files {
     width: 100%;
     border-collapse: collapse;
@@ -330,6 +336,18 @@
     width: 1%;
   }
   .files td:last-child { color: var(--ink-soft); }
+
+  .install {
+    margin-top: 18px;
+    padding: 14px 16px;
+    background: var(--surface-alt);
+    border-radius: var(--radius);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12.5px;
+    color: var(--ink);
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 
   .note {
     margin-top: 40px;
@@ -355,56 +373,57 @@
 
   @media (max-width: 560px) {
     header { padding-top: 48px; }
-    .wrap { padding: 0 18px 64px; }
+    .wrap { padding: 0 16px 64px; }
+    .files td:first-child { white-space: normal; }
   }
 </style>
 
 <div class="wrap">
 
   <header>
-    <div class="eyebrow">D:\jarvis · собран и проверен</div>
+    <div class="eyebrow">D:\jarvis · github.com/Wels112/jarvis · обновлён 7 октября 2026</div>
     <h1>Джарвис</h1>
     <p class="lede">
-      Голосовой ассистент с полным доступом к компьютеру. Слышит по-русски через
-      твою гарнитуру, отвечает голосом, помнит сказанное между запусками
-      и ничего не удаляет и не отправляет, не спросив.
+      Голосовой помощник с полным доступом к компьютеру. Слышит по-русски, отвечает
+      голосом, и перебивать его можно на полуслове, как человека. Работает и без
+      интернета — на своей модели. Ничего не удаляет и не отправляет, не спросив.
     </p>
     <div class="status">
-      <span class="chip"><span class="dot on"></span>Голос и слух — работают</span>
-      <span class="chip"><span class="dot on"></span>155 программ под голосом</span>
-      <span class="chip"><span class="dot on"></span>YouTube подключён</span>
-      <span class="chip"><span class="dot on"></span>Погода и таймеры</span>
-      <span class="chip"><span class="dot on"></span>Иконка в трее и клавиши</span>
-      <span class="chip"><span class="dot on"></span>Живой голос Silero</span>
-      <span class="chip"><span class="dot on"></span>Ученики и расписание</span>
-      <span class="chip"><span class="dot wait"></span>Gemini — ждёт ключ</span>
-      <span class="chip"><span class="dot wait"></span>Telegram — ждёт вход</span>
+      <span class="chip"><span class="dot on"></span>Живой разговор с перебиванием</span>
+      <span class="chip"><span class="dot on"></span>Без интернета — своя модель</span>
+      <span class="chip"><span class="dot on"></span>60 инструментов у модели</span>
+      <span class="chip"><span class="dot on"></span>Нажимает кнопки по названию</span>
+      <span class="chip"><span class="dot on"></span>Файлы на всех дисках</span>
+      <span class="chip"><span class="dot on"></span>YouTube без ключа</span>
+      <span class="chip"><span class="dot on"></span>Телефон через Telegram</span>
+      <span class="chip"><span class="dot on"></span>Уроки, напоминания, второй мозг</span>
+      <span class="chip"><span class="dot wait"></span>Дообучение своей модели — ждёт запуска</span>
     </div>
   </header>
 
   <section>
     <h2>Осталось два шага</h2>
     <p class="sub">
-      Оба требуют входа в твои аккаунты, поэтому сделать их могу только ты.
-      Без них Джарвис уже работает — не будет лишь свободного разговора и чтения чатов.
+      Оба делаются один раз и только тобой: первый — с телефона, второй — в Google-аккаунте.
     </p>
     <div class="steps">
       <div class="step">
         <span class="step-n">ШАГ 1</span>
-        <h3>Ключ Gemini — свободный разговор</h3>
+        <h3>Привязать телефон</h3>
         <p>
-          Открой <span class="inline-code">aistudio.google.com/apikey</span>, нажми
-          Create API key, скопируй. Запусти <span class="inline-code">setup.bat</span>
-          и вставь в первое поле. Бесплатно, 1500 запросов в день.
+          При запуске, пока бот тебя не знает, Джарвис называет вслух код из шести
+          цифр. Отправь его боту <span class="inline-code">@JarvisforrArtembot</span> —
+          и он запомнит твой чат сам. Прослушал код — скажи «как подключить телефон».
         </p>
       </div>
       <div class="step">
         <span class="step-n">ШАГ 2</span>
-        <h3>Telegram — чтение и ответы</h3>
+        <h3>Дообучить свою модель</h3>
         <p>
-          На <span class="inline-code">my.telegram.org</span> → API development tools
-          возьми api_id и api_hash, впиши там же в <span class="inline-code">setup.bat</span>.
-          Потом один раз выполни вход — код из приложения вводишь ты сам.
+          Открой <a href="https://colab.research.google.com/github/Wels112/jarvis/blob/main/train/jarvis_finetune.ipynb">ноутбук в Colab</a>,
+          «Среда выполнения» → «Сменить среду выполнения» → T4 GPU, потом «Выполнить всё».
+          Час-полтора, вкладку не закрывать. В «Загрузки» придёт
+          <span class="inline-code">jarvis-lora.gguf</span> — его проверим и подключим.
         </p>
       </div>
     </div>
@@ -413,15 +432,15 @@
   <section>
     <h2>Что говорить</h2>
     <p class="sub">
-      Скажи «Джарвис» — он ответит и следующие 30 секунд принимает команды подряд,
-      имя повторять не нужно. Он чинит частые ослышки распознавания и понимает числа словами — «громкость тридцать» и «громкость 30» идут по одному правилу. Себя узнаёт и как «джарвиз», «жарвес», «дарвис»:
-      распознавание речи путает эти звуки, и на каждый вариант он откликается одинаково.
+      Скажи «Джарвис» — дальше разговор идёт без имени, пока ты говоришь, и закрывается
+      после 25 секунд тишины или «пока». Себя он узнаёт и как «джарвиз», «жарвес», «дарвис»:
+      распознавание путает эти звуки. Числа можно словами — «громкость тридцать».
     </p>
 
     <div class="legend">
       <span><span class="tag local">офлайн</span> мгновенно, без интернета</span>
       <span><span class="tag net">сеть</span> нужен интернет</span>
-      <span><span class="tag ask">спросит</span> сначала переспросит вслух</span>
+      <span><span class="tag ask">спросит</span> сначала переспросит</span>
     </div>
 
     <div class="groups">
@@ -430,55 +449,103 @@
         <h3>Программы и окна</h3>
         <div class="cmd">
           <span class="say">открой стим</span><span class="tag local">офлайн</span>
-          <span class="does">Запускает любую из 155 установленных программ — список берётся из меню «Пуск», а не прописан заранее</span>
+          <span class="does">Любая установленная программа, и из Microsoft Store. Уже открытую выводит вперёд, а не запускает вторую</span>
         </div>
         <div class="cmd">
-          <span class="say">переключись на телеграм</span><span class="tag local">офлайн</span>
-          <span class="does">Выводит нужное окно вперёд</span>
+          <span class="say">закрой хром</span><span class="tag local">офлайн</span>
+          <span class="does">Как крестиком: программа успеет спросить, сохранить ли</span>
         </div>
         <div class="cmd">
-          <span class="say">что открыто</span><span class="tag local">офлайн</span>
-          <span class="does">Перечисляет окна вслух</span>
-        </div>
-        <div class="cmd">
-          <span class="say">сверни всё</span><span class="tag local">офлайн</span>
-          <span class="does">Показывает рабочий стол</span>
+          <span class="say">переключись на телеграм · сверни всё</span><span class="tag local">офлайн</span>
+          <span class="does">«Что открыто» — перечислит окна вслух</span>
         </div>
       </div>
 
       <div class="group">
-        <h3>Браузер</h3>
+        <h3>Руки по названию</h3>
         <div class="cmd">
-          <span class="say">новая вкладка</span><span class="tag local">офлайн</span>
-          <span class="does">Работает с уже открытым окном — со всеми твоими логинами, а не в чистом браузере</span>
+          <span class="say">нажми Сохранить · нажми семь</span><span class="tag local">офлайн</span>
+          <span class="does">Кнопка, пункт меню, ссылка или вкладка — в любой программе и на странице браузера, даже ниже края экрана</span>
         </div>
         <div class="cmd">
-          <span class="say">листай вниз</span><span class="tag local">офлайн</span>
-          <span class="does">Прокручивает страницу</span>
+          <span class="say">что тут можно нажать</span><span class="tag local">офлайн</span>
+          <span class="does">Перечислит кнопки и меню активного окна</span>
         </div>
         <div class="cmd">
-          <span class="say">найди на странице отчёт</span><span class="tag local">офлайн</span>
-          <span class="does">Поиск по открытой странице</span>
+          <span class="say">что тут написано</span><span class="tag local">офлайн</span>
+          <span class="does">Прочитает текст окна — страницу за сотые доли секунды</span>
         </div>
         <div class="cmd">
-          <span class="say">назад · обнови страницу</span><span class="tag local">офлайн</span>
-          <span class="does">Навигация и перезагрузка</span>
+          <span class="say">нажми Отправить</span><span class="tag ask">спросит</span>
+          <span class="does">«Отправить», «Удалить», «Оплатить», «Не сохранять», «Выйти» — только после «да»</span>
         </div>
       </div>
 
       <div class="group">
-        <h3>Звук и музыка</h3>
+        <h3>YouTube и видео</h3>
         <div class="cmd">
-          <span class="say">громкость 30</span><span class="tag local">офлайн</span>
-          <span class="does">Понимает и «погромче», «потише», «выключи звук»</span>
+          <span class="say">включи видео про ракеты</span><span class="tag net">сеть</span>
+          <span class="does">Находит и сразу включает — ключ YouTube не нужен</span>
         </div>
         <div class="cmd">
-          <span class="say">пауза · следующий трек</span><span class="tag local">офлайн</span>
-          <span class="does">Управляет любым плеером — Яндекс Музыкой, браузером, чем угодно</span>
+          <span class="say">это не то · включи второе</span><span class="tag local">офлайн</span>
+          <span class="does">Следующий вариант той же выдачи или выбранный по номеру</span>
         </div>
         <div class="cmd">
-          <span class="say">включи на ютубе lofi hip hop</span><span class="tag net">сеть</span>
-          <span class="does">Находит и сразу запускает первое видео</span>
+          <span class="say">останови видео · на весь экран</span><span class="tag local">офлайн</span>
+          <span class="does">И проверяет по звуку, получилось ли. Не получилось — так и скажет</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Браузер и звук</h3>
+        <div class="cmd">
+          <span class="say">новая вкладка · верни вкладку</span><span class="tag local">офлайн</span>
+          <span class="does">В уже открытом окне, со всеми твоими логинами</span>
+        </div>
+        <div class="cmd">
+          <span class="say">листай вниз · найди на странице отчёт</span><span class="tag local">офлайн</span>
+          <span class="does">Прокрутка, назад, обновить, поиск по странице</span>
+        </div>
+        <div class="cmd">
+          <span class="say">громкость 30 · сделай музыку потише</span><span class="tag local">офлайн</span>
+          <span class="does">«Что сейчас играет» — по звуку приложений, а не догадкой</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Файлы <span class="new">новое</span></h3>
+        <div class="cmd">
+          <span class="say">найди файл презентацию лцт</span><span class="tag local">офлайн</span>
+          <span class="does">На всех дисках, по словам из имени и папки, мгновенно. «Таблицу», «фото», «презентацию» сужают поиск</span>
+        </div>
+        <div class="cmd">
+          <span class="say">открой второй</span><span class="tag local">офлайн</span>
+          <span class="does">Откроет найденное по номеру</span>
+        </div>
+        <div class="cmd">
+          <span class="say">пришли его на телефон</span><span class="tag net">сеть</span>
+          <span class="does">Файл уйдёт тебе в Telegram, до 50 МБ</span>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>Телефон <span class="new">новое</span></h3>
+        <div class="cmd">
+          <span class="say">(в чате с ботом) запусти игру</span><span class="tag net">сеть</span>
+          <span class="does">Пишешь или наговариваешь то же, что сказал бы голосом. Выполнит на компьютере, ответит в чат — на голосовое голосом</span>
+        </div>
+        <div class="cmd">
+          <span class="say">— (сам)</span><span class="tag net">сеть</span>
+          <span class="does">Напоминания долетают в телефон, даже когда дома никого нет</span>
+        </div>
+        <div class="cmd">
+          <span class="say">— (закреп в чате)</span><span class="tag local">офлайн</span>
+          <span class="does">Дела, уроки и заметки висят закреплённым сообщением и видны без интернета. <span class="inline-code">/notes</span> — закрепить заново</span>
+        </div>
+        <div class="cmd">
+          <span class="say">как подключить телефон</span><span class="tag local">офлайн</span>
+          <span class="does">Повторит код привязки или скажет, что уже подключён</span>
         </div>
       </div>
 
@@ -486,15 +553,11 @@
         <h3>Второй мозг</h3>
         <div class="cmd">
           <span class="say">запомни что я работаю по ночам</span><span class="tag local">офлайн</span>
-          <span class="does">Помнит навсегда, между запусками и перезагрузками</span>
-        </div>
-        <div class="cmd">
-          <span class="say">что ты помнишь про работу</span><span class="tag local">офлайн</span>
-          <span class="does">Ищет по всему, что запоминал</span>
+          <span class="does">Помнит между запусками. «Что ты помнишь про работу», «забудь про кофе»</span>
         </div>
         <div class="cmd">
           <span class="say">заметка идея для ролика про нейросети</span><span class="tag local">офлайн</span>
-          <span class="does">Пишет в дневник, разложенный по датам</span>
+          <span class="does">Дневник по датам; «что у меня в заметках»</span>
         </div>
       </div>
 
@@ -502,51 +565,19 @@
         <h3>График и таймеры</h3>
         <div class="cmd">
           <span class="say">напомни позвонить маме завтра в 12</span><span class="tag local">офлайн</span>
-          <span class="does">Понимает «завтра в 15», «в пятницу», «через 20 минут», «10 сентября в 9:30»</span>
+          <span class="does">«Через неделю в 15:30», «в следующую пятницу», «через полтора часа»</span>
         </div>
         <div class="cmd">
           <span class="say">поставь таймер на 10 минут</span><span class="tag local">офлайн</span>
-          <span class="does">Секунды, минуты, часы. «Сколько осталось» — скажет, сколько тикать</span>
+          <span class="does">«Сколько осталось» — скажет, сколько тикать</span>
         </div>
         <div class="cmd">
           <span class="say">какие у меня задачи</span><span class="tag local">офлайн</span>
-          <span class="does">План на сегодня, завтра или неделю. Таймеры сюда не лезут</span>
+          <span class="does">Сегодня, завтра, на неделю</span>
         </div>
         <div class="cmd">
           <span class="say">— (сам)</span><span class="tag local">офлайн</span>
-          <span class="does">Когда приходит время, напоминает вслух без всякой команды</span>
-        </div>
-      </div>
-
-      <div class="group">
-        <h3>Погода</h3>
-        <div class="cmd">
-          <span class="say">какая погода</span><span class="tag net">сеть</span>
-          <span class="does">Температура, осадки, ветер и вилка на день — без ключа и регистрации</span>
-        </div>
-        <div class="cmd">
-          <span class="say">погода в питере</span><span class="tag net">сеть</span>
-          <span class="does">Понимает падежи и прозвища: «в питере», «в мск», «в ебурге»</span>
-        </div>
-        <div class="cmd">
-          <span class="say">погода</span><span class="tag net">сеть</span>
-          <span class="does">Город запоминается — назвал один раз, дальше можно просто «погода»</span>
-        </div>
-      </div>
-
-      <div class="group">
-        <h3>Канал и переписка</h3>
-        <div class="cmd">
-          <span class="say">сколько у меня подписчиков</span><span class="tag net">сеть</span>
-          <span class="does">Статистика канала и просмотры последних роликов</span>
-        </div>
-        <div class="cmd">
-          <span class="say">что в телеграме</span><span class="tag net">сеть</span>
-          <span class="does">Читает непрочитанное и переписку с конкретным человеком</span>
-        </div>
-        <div class="cmd">
-          <span class="say">напиши Саше что буду поздно</span><span class="tag ask">спросит</span>
-          <span class="does">Зачитает получателя и текст и отправит только после твоего «да»</span>
+          <span class="does">Напоминает вовремя, а пропущенное, пока был выключен, — при запуске</span>
         </div>
       </div>
 
@@ -554,103 +585,47 @@
         <h3>Уроки и ученики</h3>
         <div class="cmd">
           <span class="say">добавь ученика Петя математика 1500</span><span class="tag local">офлайн</span>
-          <span class="does">Имя, предмет, ставка за занятие</span>
+          <span class="does">«Поставь Петю на вторник в 16:00» — регулярное занятие раз и навсегда</span>
         </div>
         <div class="cmd">
-          <span class="say">поставь Петю на вторник в 16:00</span><span class="tag local">офлайн</span>
-          <span class="does">Регулярное занятие записывается один раз, а не двадцать дат на семестр</span>
-        </div>
-        <div class="cmd">
-          <span class="say">какие уроки сегодня</span><span class="tag local">офлайн</span>
-          <span class="does">Сегодня, завтра, на неделю. «Кто следующий» — сколько осталось до ближайшего</span>
-        </div>
-        <div class="cmd">
-          <span class="say">начали урок с Петей</span><span class="tag local">офлайн</span>
-          <span class="does">Таймер на длительность и предупреждение за пять минут до конца</span>
-        </div>
-        <div class="cmd">
-          <span class="say">урок закончен</span><span class="tag local">офлайн</span>
-          <span class="does">Закроет именно тот урок, который шёл, и запишет в заработок</span>
-        </div>
-        <div class="cmd">
-          <span class="say">запиши про Петю что плывёт в дробях</span><span class="tag local">офлайн</span>
-          <span class="does">Журнал по ученику: «что там с Петей» поднимет последнее за две секунды</span>
+          <span class="say">начали урок с Петей · урок закончен</span><span class="tag local">офлайн</span>
+          <span class="does">Таймер, предупреждение за 5 минут до конца, запись в заработок</span>
         </div>
         <div class="cmd">
           <span class="say">сколько я заработал за неделю</span><span class="tag local">офлайн</span>
-          <span class="does">Считает только проведённые занятия — отменённые в деньги не идут</span>
-        </div>
-        <div class="cmd">
-          <span class="say">— (сам)</span><span class="tag local">офлайн</span>
-          <span class="does">За десять минут до занятия скажет вслух, что скоро урок</span>
-        </div>
-      </div>
-
-      <div class="group">
-        <h3>Счёт, деньги, единицы</h3>
-        <div class="cmd">
-          <span class="say">сколько будет двести плюс сорок</span><span class="tag local">офлайн</span>
-          <span class="does">Числа словами тоже понимает. Считает своим разбором, а не eval — голосом можно надиктовать что угодно</span>
-        </div>
-        <div class="cmd">
-          <span class="say">15 процентов от 2000</span><span class="tag local">офлайн</span>
-          <span class="does">Проценты, корень, степень</span>
-        </div>
-        <div class="cmd">
-          <span class="say">курс доллара</span><span class="tag net">сеть</span>
-          <span class="does">Отвечает «восемьдесят шесть рублей восемь копеек», а не «86.08 RUB»</span>
-        </div>
-        <div class="cmd">
-          <span class="say">переведи 100 долларов в рубли</span><span class="tag net">сеть</span>
-          <span class="does">Падежи валют понимает: доллара, долларов, рубли</span>
-        </div>
-        <div class="cmd">
-          <span class="say">переведи 5 км в метры</span><span class="tag local">офлайн</span>
-          <span class="does">Длина, вес, время, гигабайты, градусы</span>
-        </div>
-        <div class="cmd">
-          <span class="say">разбуди в 7 утра</span><span class="tag local">офлайн</span>
-          <span class="does">Если семь уже прошло — поставит на завтра</span>
-        </div>
-        <div class="cmd">
-          <span class="say">переведи на английский привет как дела</span><span class="tag net">сеть</span>
-          <span class="does">Восемь языков, без ключей</span>
+          <span class="does">Только проведённые занятия. За 10 минут до урока скажет сам</span>
         </div>
       </div>
 
       <div class="group">
         <h3>Место на диске</h3>
         <div class="cmd">
-          <span class="say">сколько свободного места</span><span class="tag local">офлайн</span>
-          <span class="does">По обоим дискам сразу</span>
-        </div>
-        <div class="cmd">
-          <span class="say">что можно почистить</span><span class="tag local">офлайн</span>
-          <span class="does">Считает мусор, ничего не удаляя</span>
+          <span class="say">что занимает место</span><span class="tag local">офлайн</span>
+          <span class="does">По-человечески: «Dota 2 — 72 ГБ, кэш патчей Ubisoft — 7,8 ГБ» — и что с этим делать</span>
         </div>
         <div class="cmd">
           <span class="say">почисти диск</span><span class="tag ask">спросит</span>
-          <span class="does">Только кэши и временные файлы, которые система пересоздаёт сама. Документы, загрузки и корзину не трогает никогда</span>
+          <span class="does">Только кэши, временные файлы и скачанные лаунчерами патчи. Свежее, документы, загрузки и корзину не трогает</span>
+        </div>
+        <div class="cmd">
+          <span class="say">— (сам)</span><span class="tag local">офлайн</span>
+          <span class="does">Меньше 3 ГБ на C: — предупредит и скажет, куда ушло место</span>
         </div>
       </div>
 
       <div class="group">
-        <h3>Система</h3>
+        <h3>Счёт, погода, система</h3>
         <div class="cmd">
-          <span class="say">статус системы</span><span class="tag local">офлайн</span>
-          <span class="does">Процессор, память, свободное место на дисках</span>
+          <span class="say">15 процентов от 2000 · 5 км в метры</span><span class="tag local">офлайн</span>
+          <span class="does">Счёт и единицы — без сети; «курс доллара» и перевод сумм между валютами — с сетью</span>
         </div>
         <div class="cmd">
-          <span class="say">что жрёт память</span><span class="tag local">офлайн</span>
-          <span class="does">Самые тяжёлые процессы</span>
+          <span class="say">какая погода в питере</span><span class="tag net">сеть</span>
+          <span class="does">Без ключа; город запоминается</span>
         </div>
         <div class="cmd">
-          <span class="say">скриншот · заблокируй экран</span><span class="tag local">офлайн</span>
-          <span class="does">Снимок сохраняется в «Изображения»</span>
-        </div>
-        <div class="cmd">
-          <span class="say">выключи компьютер</span><span class="tag ask">спросит</span>
-          <span class="does">Переспросит вслух, прежде чем выключить</span>
+          <span class="say">что жрёт память · скриншот</span><span class="tag local">офлайн</span>
+          <span class="does">«Выключи компьютер» — переспросит</span>
         </div>
       </div>
 
@@ -658,11 +633,11 @@
         <h3>Свободный разговор</h3>
         <div class="cmd">
           <span class="say">посмотри что у меня на экране</span><span class="tag net">сеть</span>
-          <span class="does">Делает скриншот и рассказывает, что видит</span>
+          <span class="does">Видит экран и рассказывает</span>
         </div>
         <div class="cmd">
-          <span class="say">найди папку с отчётами и открой последний</span><span class="tag net">сеть</span>
-          <span class="does">Любая просьба не из списка уходит модели, а она уже сама вызывает нужные инструменты — их у неё 52</span>
+          <span class="say">любая просьба не из списка</span><span class="tag local">офлайн</span>
+          <span class="does">Уходит модели — Gemini, а без сети своей; сама вызывает нужные из 60 инструментов</span>
         </div>
         <div class="cmd">
           <span class="say">стоп</span><span class="tag local">офлайн</span>
@@ -676,51 +651,36 @@
   <section>
     <h2>Как он устроен</h2>
     <p class="sub">
-      Услышанное проходит два эшелона. Это главное решение всей конструкции:
-      бытовые команды не должны зависеть от интернета и жечь лимит запросов.
+      Три мозга, и каждый подхватывает там, где не справляется предыдущий.
+      Бытовые команды не зависят от интернета и не тратят лимит запросов.
     </p>
     <div class="flow">
       <div class="lane first">
         <h4>1. Правила</h4>
-        <p>«Громкость 30», «открой стим», «какие задачи» — разбираются на месте, без сети и без затрат. Сюда попадает почти всё повседневное.</p>
-        <span class="metric">ответ мгновенный · работает офлайн</span>
+        <p>Время, громкость, программы, видео, вкладки, напоминания, файлы — разбираются на месте.</p>
+        <span class="metric">мгновенно · офлайн</span>
       </div>
       <div class="lane second">
-        <h4>2. Модель</h4>
-        <p>Всё, что правила не поняли, уходит в Gemini — вместе с памятью о тебе и 52 инструментами, которыми она управляет компьютером.</p>
-        <span class="metric">≈2 секунды · бесплатный тариф</span>
+        <h4>2. Gemini</h4>
+        <p>Живой разговор с перебиванием, зрение, всё сложное. Голос рождается вместе с ответом.</p>
+        <span class="metric">первый звук 1,3–3 с · бесплатный тариф</span>
+      </div>
+      <div class="lane third">
+        <h4>3. Своя модель</h4>
+        <p>Qwen3.5-2B на видеокарте. Включается сама, когда пропал интернет, рвётся VPN или кончился лимит.</p>
+        <span class="metric">20 из 20 команд без сети · ответ &lt; 1 с</span>
       </div>
     </div>
-    <p class="sub" style="margin-bottom:0">
-      Распознавание речи и голос — полностью локальные: Whisper слушает, Windows-голос
-      Ирины отвечает. Ничего не платится, микрофон никуда не транслируется.
-    </p>
-  </section>
-
-  <section>
-    <h2>Голос</h2>
-    <p class="sub">
-      Говорит нейросетевым голосом Silero — звучит как живой человек, а не как
-      автоответчик. Работает локально и бесплатно: синтезирует в шесть-семь раз
-      быстрее реального времени, поэтому паузы почти не слышно.
-      Голос меняется в настройках: <span class="inline-code">aidar</span> и
-      <span class="inline-code">eugene</span> мужские,
-      <span class="inline-code">baya</span>, <span class="inline-code">kseniya</span>,
-      <span class="inline-code">xenia</span> женские.
-      Если модель почему-то не поднимется, Джарвис сам переключится на встроенную
-      в Windows Ирину — не упадёт, просто зазвучит механически.
-    </p>
   </section>
 
   <section>
     <h2>Клавиши и трей</h2>
     <p class="sub">
       Джарвис живёт иконкой-микрофоном рядом с часами: бирюзовая — слушает,
-      янтарная — думает, серая — на паузе. Правый клик открывает меню.
-      Клавиши нужны, когда говорить нельзя — рядом спят, идёт запись, ты на созвоне.
+      янтарная — думает, серая — на паузе. Клавиши — когда говорить нельзя.
     </p>
     <table class="files">
-      <tr><td>Ctrl+Alt+J</td><td>Позвать молча — имя произносить не нужно, ответит «Да?»</td></tr>
+      <tr><td>Ctrl+Alt+J</td><td>Позвать молча — имя произносить не нужно</td></tr>
       <tr><td>Ctrl+Alt+S</td><td>Немедленно замолчать</td></tr>
       <tr><td>Ctrl+Alt+P</td><td>Пауза и обратно</td></tr>
     </table>
@@ -729,25 +689,27 @@
   <section>
     <h2>Запуск</h2>
     <table class="files">
-      <tr><td>jarvis.bat</td><td>Голосовой режим — основной. Слушает постоянно, ждёт обращения по имени</td></tr>
-      <tr><td>Джарвис-текстом.bat</td><td>То же самое, но команды набираются руками — удобно проверять</td></tr>
-      <tr><td>setup.bat</td><td>Вписать ключи и проверить, что работает, а что нет</td></tr>
-      <tr><td>автозапуск.bat</td><td>Включить старт вместе с Windows. Там же и выключается</td></tr>
+      <tr><td>jarvis.bat</td><td>Голосовой режим — основной</td></tr>
+      <tr><td>Джарвис-текстом.bat</td><td>То же, но команды набираются руками</td></tr>
+      <tr><td>setup.bat</td><td>Вписать ключи и проверить, что работает</td></tr>
+      <tr><td>автозапуск.bat</td><td>Старт вместе с Windows. Там же и выключается</td></tr>
     </table>
+    <p class="sub" style="margin:22px 0 0">На другой компьютер — одной строкой в PowerShell: установщик сам найдёт Python, выберет диск с местом и спросит ключи.</p>
+    <div class="install">irm https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1 | iex</div>
 
     <div class="note">
       <p>
-        <strong>Про предохранители.</strong> Выключение компьютера, удаление файлов и любая
-        отправка сообщений наружу сначала проговариваются вслух и ждут твоего «да».
-        Одна ослышка не должна отправить постороннему случайную фразу или снести папку.
-        Режим переключается в <span class="inline-code">config/settings.json</span>.
+        <strong>Про предохранители.</strong> Выключение компьютера, удаление, любая
+        отправка наружу и необратимые кнопки сначала проговариваются и ждут твоего «да» —
+        там же, где спросили: «да» в комнате не подтвердит вопрос из телефона.
+        Бот отвечает только тебе.
       </p>
     </div>
   </section>
 
   <footer>
-    <span>Собран 3 сентября 2026 · расходы: ноль</span>
-    <span>Голосовой тракт проверен сквозным тестом: 7 из 7</span>
+    <span>Собран 3 сентября 2026 · обновлён 7 октября · расходы: ноль</span>
+    <span>Без интернета 20 из 20 · проверки в tests/</span>
   </footer>
 
 </div>
