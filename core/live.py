@@ -397,7 +397,7 @@ class LiveConversation:
         # хозяина было вшито сюда — в публичном репозитории, и для любого
         # другого человека, например клиента, оно было бы неправдой
         about = self.cfg.get("about_owner", "").strip()
-        return PERSONA.format(now=stamp, memory=memory.context_for_llm() or "пока ничего",
+        return PERSONA.format(now=stamp, memory=memory.context_for_llm(dialog=True) or "пока ничего",
                               honesty=HONESTY, about=f"О хозяине: {about}\n" if about else "")
 
     def _config(self, types):

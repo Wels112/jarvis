@@ -168,15 +168,19 @@ def _relative(t: str, now: datetime):
     return now + timedelta(**{unit: n})
 
 
-def _parse_when(text: str):
+def _parse_when(text: str, now: datetime = None):
     """Когда именно: «завтра в 15», «через неделю в 15-30», «в среду», «5 октября в 9:30».
 
     Разбор дня и времени разделён намеренно. Раньше код возвращал ответ сразу,
     как только видел «через N», и время в той же фразе терялось: напоминание
     «через неделю в 15:30» на показе 02.10.2026 встало на тот же день на 15:30.
+
+    now — для проверок: тест воспроизводит фразу, сказанную в конкретный час.
     """
-    t = text.lower().strip()
-    now = datetime.now()
+    from skills.numbers import words_to_number
+    # Модель передаёт срок как сказано — бывает и словами: «в восемь вечера»
+    t = words_to_number(text.lower().strip())
+    now = now or datetime.now()
 
     base = _relative(t, now)
     relative_short = bool(base) and re.search(r"через\s+\S*\s*(минут|мин|час|полчаса)", t)
@@ -220,11 +224,17 @@ def _parse_when(text: str):
             when += timedelta(days=1)      # полдень уже прошёл — значит завтрашний
         return when
 
-    m = re.search(r"(?:в|к|на)\s*(\d{1,2})(?:\s*[:.\-]\s*(\d{2}))?(?!\d)", t)
+    # «в 15:30», «в 15-30», «в 15 30» (так выходит из «в пятнадцать тридцать»),
+    # а без предлога — только с двоеточием: «сегодня 20:00»
+    m = (re.search(r"\b(?:в|к|на)\s*(\d{1,2})(?:\s*[:.\-]\s*(\d{2})|\s+(\d{2}))?(?!\d)", t)
+         or re.search(r"(?<![\d:.])(\d{1,2}):(\d{2})(?!\d)", t))      # «05.10» — скорее дата
     if m and not relative_short:
-        hh, mm = int(m.group(1)), int(m.group(2) or 0)
+        hh = int(m.group(1))
+        mm = int(next((g for g in m.groups()[1:] if g), 0))
         for word, (lo, hi) in DAYTIME.items():
-            if word in t and not lo <= hh <= hi:     # «в 7 вечера» → 19
+            # Слово целиком: «дня» сидит внутри «сегодня», и «сегодня в 20:00»
+            # (07.10.2026, живой разговор) читалось как «в 20 дня» → 8 утра завтра
+            if re.search(rf"\b{word}\b", t) and not lo <= hh <= hi:    # «в 7 вечера» → 19
                 hh = (hh + 12) % 24
                 break
         else:
@@ -492,9 +502,10 @@ def digest(limit: int = 3800) -> str:
 
 
 # ---------------- история диалога ----------------
-def log_dialog(role: str, text: str, keep: int = 200):
+def log_dialog(role: str, text: str, keep: int = 200, via: str = "голос"):
+    """Реплика в общий журнал разговора; via — откуда: «голос» или «Telegram»."""
     hist = _load(DIALOG, [])
-    hist.append({"role": role, "text": text,
+    hist.append({"role": role, "text": text, "via": via,
                  "at": datetime.now().isoformat(timespec="seconds")})
     _save(DIALOG, hist[-keep:])
 
@@ -503,8 +514,32 @@ def recent_dialog(n: int = 10):
     return _load(DIALOG, [])[-n:]
 
 
-def context_for_llm() -> str:
-    """Слепок памяти, который уходит в модель как системный контекст."""
+def recent_talk(minutes: int = 120, n: int = 10) -> str:
+    """Последние реплики — и голосом, и в Telegram — одним разговором.
+
+    Хозяин 07.10.2026: «телега и Джарвис работают как будто отдельно». Так и
+    было: живой разговор, мозг для сообщений с телефона и бот не знали, что
+    говорилось по соседнему каналу. Теперь модель видит недавнее из обоих.
+    """
+    since = datetime.now() - timedelta(minutes=minutes)
+    lines = []
+    for h in _load(DIALOG, [])[-n * 3:]:
+        try:
+            at = datetime.fromisoformat(h["at"])
+        except (KeyError, ValueError):
+            continue
+        if at >= since:
+            who = "хозяин" if h.get("role") == "user" else "ты"
+            lines.append(f"[{at:%H:%M}, {h.get('via', 'голос')}] {who}: {h.get('text', '')[:200]}")
+    return "\n".join(lines[-n:])
+
+
+def context_for_llm(dialog: bool = False) -> str:
+    """Слепок памяти, который уходит в модель как системный контекст.
+
+    dialog=True — добавить недавний разговор по всем каналам. Своей модели его
+    не даём: увидев в истории свой отказ, 2B-модель повторяет его на всё.
+    """
     facts = _load(FACTS, [])
     parts = []
     if facts:
@@ -513,12 +548,20 @@ def context_for_llm() -> str:
     today = list_tasks("today")
     if "ничего не запланировано" not in today and "Задач нет" not in today:
         parts.append("Задачи на сегодня: " + today)
-    try:
-        from core.phone import pending_hint     # пока телефон не привязан — код для него
-        if pending_hint():
-            parts.append(pending_hint())
-    except Exception:
-        pass
+    if dialog:
+        # Телефон и общий разговор — облаку и живому режиму. Своей модели они ни к
+        # чему: она работает, когда нет сети, а без сети нет и Telegram
+        try:
+            from core.phone import pending_hint, connected_hint
+            # пока телефон не привязан — код для него; привязан — что через него можно
+            for hint in (pending_hint(), connected_hint()):
+                if hint:
+                    parts.append(hint)
+        except Exception:
+            pass
+        talk = recent_talk()
+        if talk:
+            parts.append("Недавний разговор — голосом и в Telegram, это один разговор:\n" + talk)
     return "\n".join(parts)
 
 

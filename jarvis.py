@@ -151,7 +151,7 @@ class Jarvis:
     def say(self, text: str):
         if not text:
             return
-        memory.log_dialog("jarvis", text)
+        memory.log_dialog("jarvis", text, via="Telegram" if self._quiet else "голос")
         log.said(text)
         if self._quiet:
             self._answer.append(text)     # спросили с телефона: ответ уходит в чат
@@ -277,7 +277,7 @@ class Jarvis:
             self.awake_until = now + DIALOG_WINDOW
 
         print(f"👤 {text}")
-        memory.log_dialog("user", text)
+        memory.log_dialog("user", text, via="Telegram" if self._quiet else "голос")
         log.heard(text)
 
         # ждём подтверждения опасного действия
@@ -452,6 +452,7 @@ class Jarvis:
 
     def _reminder_loop(self):
         # 10 секунд, а не 30: таймер, опоздавший на полминуты, уже бесполезен
+        from datetime import datetime
         from skills import lessons
         self.voice.wait()                 # сначала поздороваться, потом докладывать
         self._tell_overdue()
@@ -462,7 +463,9 @@ class Jarvis:
                     if t.get("timer"):
                         self.notify("Время вышло.")
                     else:
-                        self.notify(f"Напоминаю: {t['text']}.")
+                        # С временем: в телефоне сообщение читают позже, чем оно пришло
+                        at = datetime.fromisoformat(t["when"])
+                        self.notify(f"Напоминаю: {t['text']} — {at:%H:%M}.")
             except Exception as e:
                 print(f"[будильник] {e}")
 

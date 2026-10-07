@@ -57,6 +57,31 @@ def pending_hint() -> str:
                 f"боту{name} код {' '.join(p.pair_code)} — и всё, больше ничего не нужно.")
     return ""
 
+
+def connected_hint() -> str:
+    """Строчка для модели, когда телефон подключён: что через него можно.
+
+    Без неё на «добавь мне в телеграм» модель звала инструменты личного
+    Telegram хозяина (они не подключены), получала «Telegram не подключён» и
+    говорила, что телефона нет, — хотя бот работал (07.10.2026).
+    """
+    p = CURRENT
+    if not (p and p.owner and p.available):
+        return ""
+    name = f" @{p.me}" if p.me else ""
+    text = (f"Телефон хозяина подключён: бот{name} в Telegram. Напоминания из дел сами приходят "
+            "туда в срок, дела и заметки висят там закреплённым сообщением и обновляются сами. "
+            "Написать хозяину на телефон — telegram_send с chat='me', уходит сразу; прислать "
+            "файл — send_file.")
+    try:
+        from skills import telegram as TG
+        if not TG.ready():
+            text += (" Личный Telegram хозяина (его чаты с людьми) не подключён — это другое, "
+                     "читать и писать людям пока нельзя.")
+    except Exception:
+        pass
+    return text
+
 API = "https://api.telegram.org"
 POLL_TIMEOUT = 25          # длинный опрос: соединение висит, пока нет сообщений
 MAX_TEXT = 3900            # предел сообщения в Telegram — 4096, оставляем запас
@@ -75,6 +100,7 @@ class Phone:
         self.voice_replies = cfg.get("voice_replies", "auto")   # auto | always | never
         self.push = cfg.get("push_reminders", True)
         self.pinned = cfg.get("pinned_digest", True)           # сводка заметок в закрепе
+        self.confirm_tasks = cfg.get("confirm_tasks", True)    # «Записал: … — в 20:00» в чат
         self.token = config.env("TELEGRAM_BOT_TOKEN")
         self.session = requests.Session()
         self._offset = 0
@@ -156,14 +182,18 @@ class Phone:
             pass
 
     # ---------- отправка ----------
-    def send(self, text: str, voice: bool = False, chat: int = 0):
+    def send(self, text: str, voice: bool = False, chat: int = 0) -> bool:
+        """Сообщение в чат. True — Telegram принял все части: по этому инструмент
+        честно отвечает «отправил» или «не ушло»."""
         chat = chat or self.owner
         if not (self.available and chat):
-            return
+            return False
+        ok = True
         for piece in [text[i:i + MAX_TEXT] for i in range(0, len(text), MAX_TEXT)] or [""]:
-            self._call("sendMessage", chat_id=chat, text=piece)
+            ok = self._call("sendMessage", chat_id=chat, text=piece) is not None and ok
         if voice:
             self.send_voice(text, chat)
+        return ok
 
     def send_voice(self, text: str, chat: int = 0):
         """Ответ голосом — тем же голосом, которым он говорит вслух."""
@@ -243,16 +273,11 @@ class Phone:
         if not (self.available and self.owner and self.pinned):
             return False
         import hashlib
-        import json
         from datetime import datetime
         from core import memory
         body = memory.digest()
         digest_hash = hashlib.sha1(body.encode("utf-8")).hexdigest()
-        state = {}
-        try:
-            state = json.loads(self.STATE.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            pass
+        state = self._state()
         if not renew and state.get("hash") == digest_hash and state.get("message_id"):
             return True
         text = f"📌 Джарвис: дела и заметки\nобновлено {datetime.now():%d.%m в %H:%M}\n\n{body}"
@@ -268,20 +293,70 @@ class Phone:
             message_id = sent["message_id"]
             self._call("pinChatMessage", chat_id=self.owner, message_id=message_id,
                        disable_notification="true")
+        state.update(message_id=message_id, hash=digest_hash)
+        self._save_state(state)
+        return True
+
+    def _state(self) -> dict:
+        try:
+            return json.loads(self.STATE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def _save_state(self, state: dict):
         try:
             self.STATE.parent.mkdir(parents=True, exist_ok=True)
-            self.STATE.write_text(json.dumps({"message_id": message_id, "hash": digest_hash}),
-                                  encoding="utf-8")
+            self.STATE.write_text(json.dumps(state), encoding="utf-8")
         except OSError:
             pass
-        return True
+
+    def _timed_tasks(self):
+        from datetime import datetime
+        from core import memory
+        now = datetime.now()
+        return [t for t in memory._load(memory.TASKS, [])
+                if not t["done"] and not t.get("timer") and t.get("when")
+                and datetime.fromisoformat(t["when"]) > now]
+
+    def mark_tasks_seen(self):
+        """Дела, о которых чат уже знает: записанные с телефона — ответ там уже есть."""
+        state = self._state()
+        seen = set(state.get("seen_tasks", [])) | {t["id"] for t in self._timed_tasks()}
+        state["seen_tasks"] = sorted(seen)[-300:]
+        self._save_state(state)
+
+    def announce_new_tasks(self) -> int:
+        """Новое дело со сроком — сразу сообщением в чат.
+
+        Хозяин просил (07.10.2026), чтобы бот писал «вот это, в такое-то время».
+        В срок напоминание и так приходит; а это — подтверждение, что записано
+        верно, видное сразу, а не только в правке закрепа (о ней Telegram не
+        уведомляет). Первый запуск ничего не объявляет: старое не новость.
+        """
+        if not (self.available and self.owner and self.confirm_tasks):
+            return 0
+        from datetime import datetime
+        from core import memory
+        state = self._state()
+        if "seen_tasks" not in state:
+            self.mark_tasks_seen()
+            return 0
+        seen = set(state["seen_tasks"])
+        new = [t for t in self._timed_tasks() if t["id"] not in seen]
+        for t in new:
+            when = memory.when_phrase(datetime.fromisoformat(t["when"]))
+            self.send(f"📌 Записал: {t['text']} — {when}. Напомню здесь.")
+        if new:
+            self.mark_tasks_seen()
+        return len(new)
 
     def _digest_loop(self):
         while not self._stop.is_set():
-            try:
-                self.sync_digest()
-            except Exception as e:
-                log.write("error", f"[телефон] сводка: {type(e).__name__} {str(e)[:90]}")
+            for step in (self.announce_new_tasks, self.sync_digest):
+                try:
+                    step()
+                except Exception as e:
+                    log.write("error", f"[телефон] {step.__name__}: {type(e).__name__} {str(e)[:90]}")
             self._stop.wait(DIGEST_EVERY)
 
     # ---------- приём ----------
@@ -377,6 +452,7 @@ class Phone:
         answer = self.j.answer_text(text, source="phone")
         speak = self.voice_replies == "always" or (self.voice_replies == "auto" and was_voice)
         self.send(answer or "Сделал.", voice=speak)
+        self.mark_tasks_seen()      # записанное с телефона уже подтверждено ответом
         self.sync_digest()          # записал с телефона — закреп сразу свежий
 
     def _poll_loop(self):

@@ -52,6 +52,7 @@ def main():
     phone = Phone(j)
     phone.token, phone.owner = "тест", OWNER
     phone.pinned = False        # сводка проверяется отдельно, в разделе 7
+    phone.STATE = Path("D:/pytmp/test_phone_main_state.json")    # настоящий закреп не трогаем
     fake = FakePhone(phone)
     j.phone = phone
     errors = 0
@@ -197,7 +198,7 @@ def main():
         code = fresh.pair_code
         import core.phone as phone_module
         phone_module.CURRENT = fresh
-        ctx_before = memory.context_for_llm()
+        ctx_before = memory.context_for_llm(dialog=True)
         wrong = "000000" if code != "000000" else "111111"
         fresh._handle({"chat": {"id": OWNER}, "text": wrong})
         step_wrong = (fresh.owner == 0 and pf.texts() and "отправь код" in pf.texts()[-1])
@@ -207,7 +208,7 @@ def main():
         step_ok = (fresh.owner == OWNER and not fresh.pair_code and pf.texts()
                    and "слушаюсь только тебя" in pf.texts()[0]
                    and saved == {"phone": {"owner_id": OWNER}, "name": "Джарвис"})
-        ctx_after = memory.context_for_llm()
+        ctx_after = memory.context_for_llm(dialog=True)
         step_ctx = (" ".join(code) in ctx_before and "отправить" in ctx_before
                     and " ".join(code) not in ctx_after)
         pf.clear()
@@ -226,6 +227,68 @@ def main():
     finally:
         config.CONFIG_FILE = real_file
         settings.unlink(missing_ok=True)
+    # 9–11. Джарвис и бот — одно целое (живой разговор 07.10.2026: «добавь мне в
+    # телеграм» ушло в личный Telegram, Джарвис сказал, что телефона нет)
+    from core import brain as B
+    import core.phone as phone_module
+    real_tasks, real_dialog = memory.TASKS, memory.DIALOG
+    memory.TASKS, memory.DIALOG = Path("D:/pytmp/test_tasks.json"), Path("D:/pytmp/test_dialog.json")
+    for p in (memory.TASKS, memory.DIALOG):
+        p.unlink(missing_ok=True)
+    j.cfg["phone"]["owner_id"] = OWNER
+    paired = Phone(j)
+    paired.token, paired.owner, paired.me = "тест", OWNER, "JarvisforrArtembot"
+    paired.STATE = Path("D:/pytmp/test_phone_state.json")
+    paired.STATE.unlink(missing_ok=True)
+    pp = FakePhone(paired)
+    try:
+        class Bx:
+            phone = paired
+        said = B._t_tg_send(Bx(), "@me", "Ученик сегодня в 20:00")
+        step_me = pp.texts() == ["Ученик сегодня в 20:00"] and said.startswith("Отправил хозяину")
+        Bx.phone = None
+        said_none = B._t_tg_send(Bx(), "мне", "тест")
+        step_honest = said_none.startswith("НЕ ОТПРАВЛЕНО")
+
+        phone_module.CURRENT = paired
+        ctx = memory.context_for_llm(dialog=True)
+        step_aware = ("Телефон хозяина подключён" in ctx and "chat='me'" in ctx
+                      and "Телефон" not in memory.context_for_llm())     # своей модели — без него
+
+        pp.clear()
+        paired.announce_new_tasks()                         # первый раз: старое не объявляем
+        memory.add_task("позвонить маме", "сегодня в 23:59")
+        n_new = paired.announce_new_tasks()
+        announced = [t for t in pp.texts() if t.startswith("📌 Записал")]
+        again = paired.announce_new_tasks()
+        step_announce = n_new == 1 and len(announced) == 1 and "позвонить маме" in announced[0] and again == 0
+
+        j.phone = paired
+        paired._handle({"chat": {"id": OWNER}, "text": "напомни завтра в 10 купить хлеб"})
+        pp.clear()
+        step_no_dup = paired.announce_new_tasks() == 0 and not pp.texts()
+
+        j.process("какие у меня задачи", from_voice=False)  # голосом (не из телефона)
+        talk = memory.recent_talk()
+        step_talk = ("Telegram] хозяин: напомни завтра в 10 купить хлеб" in talk
+                     and "голос] хозяин: какие у меня задачи" in talk
+                     and "один разговор" in memory.context_for_llm(dialog=True)
+                     and "один разговор" not in memory.context_for_llm())
+    finally:
+        memory.TASKS, memory.DIALOG = real_tasks, real_dialog
+        for p in (Path("D:/pytmp/test_tasks.json"), Path("D:/pytmp/test_dialog.json"), paired.STATE,
+                  phone.STATE):
+            p.unlink(missing_ok=True)
+        phone_module.CURRENT = None
+    for name, ok in (("«напиши мне» — через бота, сразу", step_me),
+                     ("без телефона — честное «не отправлено»", step_honest),
+                     ("модель знает, что телефон подключён", step_aware),
+                     ("новое дело — «Записал … Напомню здесь», один раз", step_announce),
+                     ("записанное с телефона не дублируется", step_no_dup),
+                     ("разговор общий: голос и Telegram с метками, своей модели — без него", step_talk)):
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} вместе: {name}")
+
     for name, ok in (("неверный код — просит код, хозяина нет", step_wrong),
                      ("верный код — хозяин, в настройках только owner_id", step_ok),
                      ("тот же код из другого чата уже не работает", step_reuse),

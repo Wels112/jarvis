@@ -126,7 +126,7 @@ class Brain:
         raise RuntimeError("все модели недоступны — " + "; ".join(errors))
 
     def _system_block(self):
-        ctx = memory.context_for_llm()
+        ctx = memory.context_for_llm(dialog=True)     # с недавним разговором голосом и в Telegram
         text = PERSONA + (("\n\nПамять:\n" + ctx) if ctx else "")
         return {"parts": [{"text": text}]}
 
@@ -592,8 +592,32 @@ def _t_tg_read(b, chat: str, n: int = 5):
     return TG.read_chat(chat, n)
 
 
+# Как модель называет самого хозяина получателем: «@me» — так на живом разговоре
+# 07.10.2026, и этот вызов уходил в личный Telegram (не подключён) вместо бота
+OWNER_CHATS = {"me", "мне", "себе", "я", "мой", "хозяин", "хозяину", "избранное",
+               "saved messages", "телефон", "мой телефон", "на телефон", "бот", "джарвис", "jarvis"}
+
+
+def _to_owner(b, chat: str) -> bool:
+    c = (chat or "").strip().lower().lstrip("@")
+    me = (getattr(getattr(b, "phone", None), "me", "") or "").lower()
+    return c in OWNER_CHATS or bool(me and c == me)
+
+
 def _t_tg_send(b, chat: str, text: str):
-    """Отправка наружу — всегда через подтверждение хозяина, без исключений."""
+    """Отправка наружу — всегда через подтверждение хозяина, без исключений.
+
+    Кроме самого хозяина: «напиши мне в телеграм» уходит через бота Джарвиса
+    сразу — это его же телефон, подтверждать нечего.
+    """
+    if _to_owner(b, chat):
+        phone = getattr(b, "phone", None)
+        if not (phone and phone.available and phone.owner):
+            return ("НЕ ОТПРАВЛЕНО: телефон не подключён — нет бота или он ещё не знает хозяина. "
+                    "Скажи это честно; как подключить — спросят «как подключить телефон».")
+        if phone.send(text):
+            return f"Отправил хозяину в Telegram{' (бот @' + phone.me + ')' if phone.me else ''}: «{text[:120]}»."
+        return "НЕ ОТПРАВЛЕНО: Telegram не принял сообщение (нет связи?). Скажи это честно."
     desc, action = TG.prepare_send(chat, text)
     if desc is None:
         return action                                   # не подключён или чат не найден
@@ -685,8 +709,10 @@ TOOLS += [
                      "Ничего не отправляет. Единственный правильный способ переключить чат."),
      "parameters": _p(chat={"type": "string", "description": "название чата или имя человека"})},
     {"name": "telegram_send",
-     "description": ("Отправить сообщение в Telegram. Вызывай сразу, не спрашивая заранее: "
-                     "инструмент сам вернёт запрос на подтверждение с текстом и получателем."),
+     "description": ("Отправить сообщение в Telegram. chat='me' — самому хозяину на телефон через "
+                     "бота Джарвиса (напоминание, список, ссылка): уходит сразу. Другим людям — "
+                     "вызывай сразу, не спрашивая заранее: инструмент сам вернёт запрос на "
+                     "подтверждение с текстом и получателем."),
      "parameters": _p(chat={"type": "string"}, text={"type": "string"})},
 ]
 

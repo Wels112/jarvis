@@ -31,30 +31,44 @@ ALL_WORDS = {**ONES, **TENS, **HUNDREDS}
 
 
 def words_to_number(text: str) -> str:
-    """«двести сорок пять» → «245». Слова, не похожие на числа, не трогает."""
+    """«двести сорок пять» → «245». Слова, не похожие на числа, не трогает.
+
+    Подряд идущие числа складываются, только если так устроено русское число:
+    десятки — после сотен, единицы — после десятков. Иначе это уже следующее
+    число: «в пятнадцать тридцать» — это 15 и 30 (время), а не 45; «пять шесть» —
+    5 и 6, а не 11. Раньше складывалось всё подряд.
+    """
     tokens = text.split()
     out = []
     current = 0          # накопленное внутри текущей группы
     total = 0            # сумма с учётом тысяч и миллионов
     active = False
+    last = ""            # чем кончается число: сотни, десятки, единицы, «-надцать», тысячи
 
     def flush():
-        nonlocal current, total, active
+        nonlocal current, total, active, last
         if active:
             out.append(str(total + current))
-        current, total, active = 0, 0, False
+        current, total, active, last = 0, 0, False, ""
 
     for tok in tokens:
         w = tok.lower().strip(".,!?;:")
         if w in ALL_WORDS:
-            current += ALL_WORDS[w]
-            active = True
+            v = ALL_WORDS[w]
+            kind = ("hundreds" if w in HUNDREDS else "tens" if w in TENS
+                    else "ones" if 1 <= v <= 9 else "teens")
+            fits = ((last in ("hundreds", "scale") and kind != "hundreds" or last == "scale")
+                    or (last == "tens" and kind == "ones"))
+            if active and not fits:
+                flush()
+            current += v
+            active, last = True, kind
         elif w in SCALES:
             if not active:
                 current = 1
             total += current * SCALES[w]
             current = 0
-            active = True
+            active, last = True, "scale"
         else:
             flush()
             out.append(tok)
