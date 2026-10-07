@@ -64,6 +64,35 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} поправка ушла в разговор один раз")
 
+    # Обычный мозг (сообщения из Telegram, голос без живого режима): модель
+    # подменена, сеть не нужна
+    from core import brain as B
+
+    def scripted(*answers):
+        replies = iter(answers)
+
+        def post(payload):
+            return {"candidates": [{"content": {"parts": [next(replies)]}}]}
+        return post
+
+    call = {"functionCall": {"name": "telegram_send", "args": {"chat": "Саша", "text": "буду поздно"}}}
+    b = B.Brain(config.CFG)
+    b._post = scripted(call, {"text": "Отправил Саше: буду поздно."},
+                       {"text": "Не получилось: Telegram не подключён."})
+    answer = b.ask("напиши Саше что буду поздно")
+    nudges = [p["text"] for h in b.history if h["role"] == "user" for p in h["parts"]
+              if "text" in p and p["text"].startswith("(Система")]
+    ok = answer.startswith("Не получилось") and len(nudges) == 1
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} мозг переспросил себя и ответил честно: «{answer}»")
+
+    b = B.Brain(config.CFG)
+    b._post = scripted(call, {"text": "Не получилось отправить: Telegram не подключён."})
+    answer = b.ask("напиши Саше что буду поздно")
+    ok = answer.startswith("Не получилось отправить")
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} честный ответ не трогает: «{answer}»")
+
     print(f"\nошибок: {errors}")
     return errors == 0
 

@@ -148,6 +148,8 @@ class Brain:
         self._trim()
         turn_start = len(self.history) - 1       # откуда начался этот разговорный ход
 
+        from core.honesty import failed, false_claim
+        failures, nudged = [], False         # отказы инструментов в этом ходе — для сторожа честности
         # До 10 витков: «посчитай кнопками 9 × 6» — это уже пять нажатий подряд, и
         # при прежних пяти витках на ответ хозяину места не оставалось (05.10.2026)
         for _ in range(10):
@@ -177,11 +179,21 @@ class Brain:
             calls = [p["functionCall"] for p in parts_out if "functionCall" in p]
             if not calls:
                 text = " ".join(p["text"] for p in parts_out if "text" in p).strip()
-                return text or "Готово."
+                correction = false_claim(text, failures)
+                if correction and not nudged:
+                    # «Сделал» вопреки отказу инструмента — один раз просим ответить честно
+                    nudged = True
+                    self.history.append({"role": "user", "parts": [{"text": correction}]})
+                    continue
+                if not text:
+                    return f"Не получилось: {failures[-1][1]}" if failures else "Готово."
+                return text
 
             responses = []
             for call in calls:
                 result = self._run_tool(call.get("name", ""), call.get("args", {}) or {})
+                if failed(result):
+                    failures.append((call.get("name", ""), result[:160]))
                 responses.append({"functionResponse": {
                     "name": call.get("name", ""),
                     "response": {"result": result},
