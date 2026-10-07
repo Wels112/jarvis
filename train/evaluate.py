@@ -12,7 +12,6 @@
 Запуск:  .venv\\Scripts\\python.exe train\\evaluate.py Qwen3.5-2B-Q4_K_M.gguf jarvis-qwen3.5-2b-Q4_K_M.gguf
 """
 import json
-import re
 import sys
 import time
 from pathlib import Path

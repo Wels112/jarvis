@@ -10,7 +10,6 @@
 и без этого каждый запрос ждал бы впустую по 20 секунд.
 """
 import base64
-import json
 import re
 import socket
 import sys

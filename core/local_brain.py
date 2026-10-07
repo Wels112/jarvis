@@ -34,7 +34,6 @@ import re
 import subprocess
 import threading
 import time
-from pathlib import Path
 
 import requests
 
@@ -236,7 +235,6 @@ def install(progress=print) -> bool:
     Всё ложится в папку llm рядом с Джарвисом — в систему ничего не ставится,
     удаляется вместе с папкой. Обрыв связи не страшен: загрузка докачивается.
     """
-    import io
     import zipfile
     from core.download import fetch
 

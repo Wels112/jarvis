@@ -440,7 +440,6 @@ def open_board() -> str:
 def open_tutorlab() -> str:
     """Соседний проект хозяина — генератор уроков с выкладкой на доску."""
     import os
-    import webbrowser
     web = Path("D:/tutorlab/web.bat")
     if not web.exists():
         return "Не нашёл TutorLab на диске D."
