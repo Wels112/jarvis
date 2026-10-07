@@ -195,6 +195,9 @@ def main():
         fresh.token, fresh.STATE = "тест", Path("D:/pytmp/test_phone_digest.json")
         pf = FakePhone(fresh)
         code = fresh.pair_code
+        import core.phone as phone_module
+        phone_module.CURRENT = fresh
+        ctx_before = memory.context_for_llm()
         wrong = "000000" if code != "000000" else "111111"
         fresh._handle({"chat": {"id": OWNER}, "text": wrong})
         step_wrong = (fresh.owner == 0 and pf.texts() and "отправь код" in pf.texts()[-1])
@@ -204,6 +207,9 @@ def main():
         step_ok = (fresh.owner == OWNER and not fresh.pair_code and pf.texts()
                    and "слушаюсь только тебя" in pf.texts()[0]
                    and saved == {"phone": {"owner_id": OWNER}, "name": "Джарвис"})
+        ctx_after = memory.context_for_llm()
+        step_ctx = (" ".join(code) in ctx_before and "отправить" in ctx_before
+                    and " ".join(code) not in ctx_after)
         pf.clear()
         fresh._handle({"chat": {"id": STRANGER}, "text": code})
         step_reuse = fresh.owner == OWNER and pf.texts() and "только хозяину" in pf.texts()[-1]
@@ -223,6 +229,7 @@ def main():
     for name, ok in (("неверный код — просит код, хозяина нет", step_wrong),
                      ("верный код — хозяин, в настройках только owner_id", step_ok),
                      ("тот же код из другого чата уже не работает", step_reuse),
+                     ("модель знает код, пока не привязан, и забывает после", step_ctx),
                      ("подбор: 5 ответов, потом тишина, и код уже не принят", step_brute)):
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} привязка: {name}")

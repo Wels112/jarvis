@@ -513,6 +513,12 @@ def context_for_llm() -> str:
     today = list_tasks("today")
     if "ничего не запланировано" not in today and "Задач нет" not in today:
         parts.append("Задачи на сегодня: " + today)
+    try:
+        from core.phone import pending_hint     # пока телефон не привязан — код для него
+        if pending_hint():
+            parts.append(pending_hint())
+    except Exception:
+        pass
     return "\n".join(parts)
 
 
