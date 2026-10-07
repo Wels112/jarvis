@@ -360,6 +360,8 @@ D:\jarvis\.venv\Scripts\python.exe D:\jarvis\tests\test_voice_pipeline.py
 | Живой режим не открылся: просьба не теряется, про VPN — честно | `test_live_fallback.py` |
 | «Удали игру …»: найти, назвать размер, спросить — ничего не удаляя | `test_uninstall.py` |
 | Telegram на компьютере: только открытый чат, после «да», без Enter вслепую | `test_tg_desktop.py` |
+| Знает свои руки: «нажми мышкой», «напиши в Claude» — инструментом (нужен ключ) | `test_hands_aware.py` |
+| Сам говорит важное один раз, а не при каждом запуске; план дня с уроками | `test_announce.py` |
 | Напоминания: «через неделю в 15:30» и прочее | `test_reminders.py` |
 | Имя: 11 живых вариантов, ни одного ложного пробуждения | `test_wake_name.py` |
 | Безопасность PowerShell: только чтение | `test_safety.py` |

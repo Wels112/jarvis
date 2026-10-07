@@ -41,6 +41,30 @@ DISK_WARN_GB = 3.0      # меньше — Windows уже тормозит и н
 # Дольше этого думает — скажем «Секунду», чтобы не висела тишина. Два с лишним:
 # само слово звучит почти секунду, и на быстром ответе оно только мешает
 FILLER_AFTER = 2.0
+# Что и когда уже сказано по своей инициативе — живёт через перезапуски
+ANNOUNCED = config.DATA / "brain" / ("announced.test.json" if log.TAG else "announced.json")
+
+
+def _announced(key: str, within: float) -> bool:
+    """Говорил ли это недавно — даже если Джарвиса с тех пор перезапускали."""
+    import json
+    try:
+        return time.time() - json.loads(ANNOUNCED.read_text(encoding="utf-8")).get(key, 0) < within
+    except (OSError, ValueError):
+        return False
+
+
+def _mark_announced(key: str):
+    import json
+    try:
+        data = json.loads(ANNOUNCED.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data[key] = time.time()
+    try:
+        ANNOUNCED.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
 
 
 class Jarvis:
@@ -398,7 +422,9 @@ class Jarvis:
             return
         gb = free / 1024 ** 3
         now = time.time()
-        if gb >= DISK_WARN_GB or now - getattr(self, "_disk_warned_at", 0) < 6 * 3600:
+        # Не чаще раза в шесть часов — и через перезапуски: хозяин закрывает и
+        # открывает Джарвиса по нескольку раз в день, и предупреждение звучало каждый раз
+        if gb >= DISK_WARN_GB or _announced("disk", 6 * 3600):
             return
         # Сказать сразу, куда ушло место: «почисти временные файлы» при 74 ГБ
         # игры на диске — не помощь. Замер идёт в фоне около минуты; первые три
@@ -407,8 +433,9 @@ class Jarvis:
         self._disk_check_since = getattr(self, "_disk_check_since", None) or now
         if not hint and now - self._disk_check_since < 180:
             return
-        self._disk_warned_at = now
-        self.notify(f"На диске C осталось {gb:.1f} гигабайта — это мало, Windows может начать "
+        _mark_announced("disk")
+        amount = f"{gb:.1f}".replace(".", ",")          # «1,7» — по-русски, а не «один точка семь»
+        self.notify(f"На диске C осталось {amount} гигабайта — это мало, Windows может начать "
                     f"тормозить. {hint + ' ' if hint else ''}Скажи «почисти диск» — уберу мусор, "
                     "или «что занимает место» — расскажу подробнее.")
 
@@ -436,13 +463,16 @@ class Jarvis:
         except Exception as e:
             print(f"[план дня] задачи: {e}")
         try:
+            # Время занятия — в поле at (datetime). Прежняя проверка смотрела в
+            # несуществующее time, и уроки в плане дня не звучали никогда
             today = lessons._planned_for(datetime.now().date())
-            upcoming = [it for it in today if it.get("time", "") >= f"{datetime.now():%H:%M}"]
+            upcoming = [it for it in today if it["at"] >= datetime.now()]
             if upcoming:
-                bits.append(f"уроков впереди {len(upcoming)}, первый в {upcoming[0]['time']}")
+                bits.append(f"уроков впереди {len(upcoming)}, первый в {upcoming[0]['at']:%H:%M}")
         except Exception as e:
             print(f"[план дня] уроки: {e}")
-        if bits:
+        if bits and not _announced("today", 3 * 3600):
+            _mark_announced("today")
             self.say("Из плана: " + "; ".join(bits) + ".")
 
     def _tell_overdue(self):
