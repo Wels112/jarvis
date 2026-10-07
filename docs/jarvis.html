@@ -395,7 +395,8 @@
       <span class="chip"><span class="dot on"></span>Нажимает кнопки по названию</span>
       <span class="chip"><span class="dot on"></span>Файлы на всех дисках</span>
       <span class="chip"><span class="dot on"></span>YouTube без ключа</span>
-      <span class="chip"><span class="dot on"></span>Телефон через Telegram</span>
+      <span class="chip"><span class="dot on"></span>Телефон: бот на связи</span>
+      <span class="chip"><span class="dot on"></span>Не врёт: проверяет свои «сделал»</span>
       <span class="chip"><span class="dot on"></span>Уроки, напоминания, второй мозг</span>
       <span class="chip"><span class="dot wait"></span>Дообучение своей модели — ждёт запуска</span>
     </div>
@@ -404,16 +405,16 @@
   <section>
     <h2>Осталось два шага</h2>
     <p class="sub">
-      Оба делаются один раз и только тобой: первый — с телефона, второй — в Google-аккаунте.
+      Оба делаются один раз и только тобой.
     </p>
     <div class="steps">
       <div class="step">
         <span class="step-n">ШАГ 1</span>
-        <h3>Привязать телефон</h3>
+        <h3>Автозапуск — чтобы напоминания не пропадали</h3>
         <p>
-          При запуске, пока бот тебя не знает, Джарвис называет вслух код из шести
-          цифр. Отправь его боту <span class="inline-code">@JarvisforrArtembot</span> —
-          и он запомнит твой чат сам. Прослушал код — скажи «как подключить телефон».
+          Напоминания звучат и приходят в Telegram, только пока Джарвис включён.
+          Закрыл окно — пропущенное он скажет при следующем запуске. Чтобы он
+          стартовал вместе с Windows, запусти <span class="inline-code">автозапуск.bat</span>.
         </p>
       </div>
       <div class="step">
@@ -459,6 +460,10 @@
           <span class="say">переключись на телеграм · сверни всё</span><span class="tag local">офлайн</span>
           <span class="does">«Что открыто» — перечислит окна вслух</span>
         </div>
+        <div class="cmd">
+          <span class="say">удали игру дота</span><span class="tag ask">спросит</span>
+          <span class="does">Найдёт среди установленного, назовёт размер и после «да» запустит её деинсталлятор (игры Steam — через Steam), где подтвердишь ещё раз</span>
+        </div>
       </div>
 
       <div class="group">
@@ -500,6 +505,10 @@
       <div class="group">
         <h3>Браузер и звук</h3>
         <div class="cmd">
+          <span class="say">найди в интернете парикмахерские в питере</span><span class="tag net">сеть</span>
+          <span class="does">Ищет в Яндексе. «Найди … в гугле» — разово в Google; «ищи через гугл» — насовсем и повторит запрос</span>
+        </div>
+        <div class="cmd">
           <span class="say">новая вкладка · верни вкладку</span><span class="tag local">офлайн</span>
           <span class="does">В уже открытом окне, со всеми твоими логинами</span>
         </div>
@@ -536,8 +545,12 @@
           <span class="does">Пишешь или наговариваешь то же, что сказал бы голосом. Выполнит на компьютере, ответит в чат — на голосовое голосом</span>
         </div>
         <div class="cmd">
+          <span class="say">напиши мне в телеграм список дел</span><span class="tag net">сеть</span>
+          <span class="does">Придёт тебе через бота сразу. Голос и чат — один разговор: Джарвис помнит, что ты писал в Telegram, и наоборот</span>
+        </div>
+        <div class="cmd">
           <span class="say">— (сам)</span><span class="tag net">сеть</span>
-          <span class="does">Напоминания долетают в телефон, даже когда дома никого нет</span>
+          <span class="does">Новое дело — «📌 Записал: … — в 20:00. Напомню здесь»; в срок — «Напоминаю: … — 20:00»; утром — план на день</span>
         </div>
         <div class="cmd">
           <span class="say">— (закреп в чате)</span><span class="tag local">офлайн</span>
