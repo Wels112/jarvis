@@ -492,6 +492,29 @@ def handle(text: str, cfg: dict) -> Reply:
         n = len(S.build_app_index(force=True))
         return Reply(say=f"Список обновлён, вижу {n} программ.")
 
+    # --- где искать: Яндекс или Google ---
+    # Насовсем: «ищи через яндекс», «переключи поиск на гугл», «надо яндекс
+    # активировать» (так хозяин и сказал 07.10.2026, а Джарвис в ответ лишь
+    # открыл ya.ru и переспросил, что искать). Последний запрос повторяется там
+    eng = r"(яндекс\w*|гугл\w*|google|yandex)"
+    m = (re.search(rf"^(?:ищи|искать)\s+(?:всегда\s+)?(?:в|через)\s+{eng}$", t)
+         or re.search(rf"(?:переключи\w*|смени\w*|поменяй|поставь)\s+(?:поиск\w*|поисковик\w*)\s+(?:на\s+)?{eng}", t)
+         or re.search(rf"(?:активируй|активировать)\s+{eng}|{eng}\s+(?:активируй|активировать)", t)
+         or re.search(rf"(?:через|в)\s+{eng}\s+(?:ищи|ищем|давай искать)", t))
+    if m:
+        return Reply(say=S.set_search_engine(S.engine_of(next(g for g in m.groups() if g))))
+    # Разово: «найди в яндексе …», «найди … в гугле»; «найди это в яндексе» — прошлый запрос
+    m = re.search(rf"^(?:найди|поищи|ищи|посмотри|загугли)\s+(?:в|через)\s+{eng}\s+(.+)$", t)
+    if m:
+        engine, q = S.engine_of(m.group(1)), m.group(2).strip()
+    else:
+        m = re.search(rf"^(?:найди|поищи|посмотри)\s+(.+?)\s+(?:в|через)\s+{eng}$", t)
+        engine, q = (S.engine_of(m.group(2)), m.group(1).strip()) if m else ("", "")
+    if m:
+        if q in ("это", "то же", "то же самое", "его", "ее", "её") and S._last_search["query"]:
+            q = S._last_search["query"]
+        return Reply(say=S.search_web(q, engine))
+
     # --- поиск ---
     m = re.search(r"^(?:найди|поищи|загугли|погугли)\s+(?:в интернете\s+|в гугле\s+)?(.+)$", t)
     if m:

@@ -128,12 +128,8 @@ class Phone:
         self.owner, self.pair_code = chat, ""
         self.j.cfg.setdefault("phone", {})["owner_id"] = chat
         try:
-            # Только одно поле: config.save записал бы в файл и все значения по умолчанию
-            path = config.CONFIG_FILE
-            raw = json.loads(path.read_text(encoding="utf-8-sig")) if path.exists() else {}
-            raw.setdefault("phone", {})["owner_id"] = chat
-            path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
-        except (OSError, ValueError) as e:
+            config.update_setting("phone.owner_id", chat)
+        except OSError as e:
             log.write("error", f"[телефон] не сохранил хозяина: {e}")
         log.write("info", f"[телефон] привязан хозяин {chat}")
         self.send("Готово: теперь я слушаюсь только тебя. Пиши или наговаривай — сделаю на "

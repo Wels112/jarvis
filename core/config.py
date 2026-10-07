@@ -17,7 +17,10 @@ for d in (DATA, BRAIN, LOGS, MODELS, ROOT / "config"):
 DEFAULTS = {
     "name": "Джарвис",
     "wake_words": ["джарвис", "жарвис", "джарвес", "дарвис", "джорвис"],
-    "owner": "Иван",
+    "owner": "хозяин",              # как обращаться — спрашивает установщик
+    # Где искать: Яндекс лучше знает города России, места и организации —
+    # хозяин попросил его прямо (07.10.2026). «Ищи через гугл» — переключит
+    "search_engine": "yandex",
     "voice": {
         "engine": "sapi",           # sapi | silero
         "sapi_voice": "Irina",
@@ -71,6 +74,30 @@ def load() -> dict:
 
 def save(cfg: dict) -> None:
     CONFIG_FILE.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def update_setting(path: str, value) -> None:
+    """Поменять одну настройку («phone.owner_id») — в памяти и в settings.json.
+
+    Только её: save() записал бы в файл и все значения по умолчанию, и потом
+    их уже не поменять обновлением кода.
+    """
+    keys = path.split(".")
+    node = CFG
+    for k in keys[:-1]:
+        node = node.setdefault(k, {})
+    node[keys[-1]] = value
+    raw = {}
+    if CONFIG_FILE.exists():
+        try:
+            raw = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
+        except ValueError:
+            return                  # битый файл не перезаписываем — пусть разберётся человек
+    node = raw
+    for k in keys[:-1]:
+        node = node.setdefault(k, {})
+    node[keys[-1]] = value
+    CONFIG_FILE.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def env(key: str, default: str = "") -> str:

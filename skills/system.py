@@ -265,9 +265,41 @@ def open_site(what: str) -> str:
     return f"Открываю {what}."
 
 
-def search_web(query: str) -> str:
-    webbrowser.open("https://www.google.com/search?q=" + query)
-    return f"Ищу: {query}"
+SEARCH = {
+    "yandex": ("https://ya.ru/search/?text=", "в Яндексе"),
+    "google": ("https://www.google.com/search?q=", "в Google"),
+}
+_last_search = {"query": "", "at": 0.0}     # чтобы «а теперь в яндексе» повторило запрос
+
+
+def engine_of(word: str) -> str:
+    """«яндексе», «гугл», «google» → yandex | google."""
+    return "google" if re.search(r"гугл|google", word.lower()) else "yandex"
+
+
+def search_web(query: str, engine: str = "") -> str:
+    """Поиск в браузере. Где — из настроек (search_engine), если не сказано явно.
+
+    Запрос кодируется для адреса: «рецепт R&B» без этого обрывался на «&».
+    """
+    from urllib.parse import quote_plus
+    from core import config
+    engine = engine or config.CFG.get("search_engine", "yandex")
+    url, where = SEARCH.get(engine, SEARCH["yandex"])
+    webbrowser.open(url + quote_plus(query))
+    _last_search.update(query=query, at=time.time())
+    return f"Ищу {where}: {query}"
+
+
+def set_search_engine(engine: str) -> str:
+    """Запомнить поисковик насовсем и повторить там последний запрос, если он был недавно."""
+    from core import config
+    config.update_setting("search_engine", engine)
+    where = SEARCH[engine][1]
+    if _last_search["query"] and time.time() - _last_search["at"] < 600:
+        search_web(_last_search["query"], engine)
+        return f"Теперь ищу {where}. Повторил: «{_last_search['query']}»."
+    return f"Теперь ищу {where}."
 
 
 def is_cloaked(hwnd) -> bool:
