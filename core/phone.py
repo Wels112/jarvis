@@ -23,6 +23,10 @@
 
 * Опасное действие подтверждается там же, где спрошено: подтверждение с
   телефона не закрывает вопрос, заданный голосом, и наоборот.
+
+* Дела и заметки висят в чате закреплённым сообщением и правятся на месте.
+  Telegram хранит переписку на телефоне — так заметки видны и без интернета,
+  без отдельного приложения (sync_digest, команда /notes).
 """
 import io
 import threading
@@ -35,9 +39,12 @@ from core import config, log
 API = "https://api.telegram.org"
 POLL_TIMEOUT = 25          # длинный опрос: соединение висит, пока нет сообщений
 MAX_TEXT = 3900            # предел сообщения в Telegram — 4096, оставляем запас
+DIGEST_EVERY = 60          # сводку сверяем раз в минуту, правим — только если поменялась
 
 
 class Phone:
+    STATE = config.DATA / "brain" / "phone_digest.json"   # какое сообщение закреплено
+
     def __init__(self, jarvis):
         self.j = jarvis
         cfg = jarvis.cfg.get("phone", {})
@@ -45,6 +52,7 @@ class Phone:
         self.owner = int(cfg.get("owner_id", 0) or 0)
         self.voice_replies = cfg.get("voice_replies", "auto")   # auto | always | never
         self.push = cfg.get("push_reminders", True)
+        self.pinned = cfg.get("pinned_digest", True)           # сводка заметок в закрепе
         self.token = config.env("TELEGRAM_BOT_TOKEN")
         self.session = requests.Session()
         self._offset = 0
@@ -159,6 +167,61 @@ class Phone:
         if self.push and self.available and self.owner:
             self.send(text)
 
+    # ---------- закреплённая сводка ----------
+    def sync_digest(self, renew: bool = False) -> bool:
+        """Заметки и дела в закреплённом сообщении — видны в Telegram и без интернета.
+
+        Хозяин хотел, чтобы заметки были под рукой, даже когда сети нет, и без
+        отдельного приложения из Google Play. Telegram хранит переписку на
+        телефоне, поэтому одно закреплённое сообщение и есть такая книжка.
+        Сообщение одно и правится на месте: лента не засоряется, а закреп всегда
+        свежий. Правим, только когда содержимое поменялось. Удалил хозяин
+        сообщение — пришлём новое и закрепим его.
+        """
+        if not (self.available and self.owner and self.pinned):
+            return False
+        import hashlib
+        import json
+        from datetime import datetime
+        from core import memory
+        body = memory.digest()
+        digest_hash = hashlib.sha1(body.encode("utf-8")).hexdigest()
+        state = {}
+        try:
+            state = json.loads(self.STATE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pass
+        if not renew and state.get("hash") == digest_hash and state.get("message_id"):
+            return True
+        text = f"📌 Джарвис: дела и заметки\nобновлено {datetime.now():%d.%m в %H:%M}\n\n{body}"
+        message_id = state.get("message_id") if not renew else None
+        if message_id and self._call("editMessageText", chat_id=self.owner,
+                                     message_id=message_id, text=text) is None:
+            message_id = None           # сообщение удалили или оно слишком старое
+        if not message_id:
+            sent = self._call("sendMessage", chat_id=self.owner, text=text,
+                              disable_notification="true")
+            if not sent:
+                return False
+            message_id = sent["message_id"]
+            self._call("pinChatMessage", chat_id=self.owner, message_id=message_id,
+                       disable_notification="true")
+        try:
+            self.STATE.parent.mkdir(parents=True, exist_ok=True)
+            self.STATE.write_text(json.dumps({"message_id": message_id, "hash": digest_hash}),
+                                  encoding="utf-8")
+        except OSError:
+            pass
+        return True
+
+    def _digest_loop(self):
+        while not self._stop.is_set():
+            try:
+                self.sync_digest()
+            except Exception as e:
+                log.write("error", f"[телефон] сводка: {type(e).__name__} {str(e)[:90]}")
+            self._stop.wait(DIGEST_EVERY)
+
     # ---------- приём ----------
     def _download(self, file_id: str):
         info = self._call("getFile", file_id=file_id)
@@ -224,6 +287,11 @@ class Phone:
             text = (message.get("text") or "").strip()
         if not text:
             return
+        if text.split()[0] == "/notes":
+            ok = self.sync_digest(renew=True)
+            self.send("Закрепил свежую сводку дел и заметок — она видна и без интернета."
+                      if ok else "Не вышло закрепить сводку — посмотри журнал.")
+            return
         if text.startswith("/"):
             text = {"/start": "привет", "/help": "что ты умеешь",
                     "/tasks": "какие у меня задачи"}.get(text.split()[0], text.lstrip("/"))
@@ -233,6 +301,7 @@ class Phone:
         answer = self.j.answer_text(text, source="phone")
         speak = self.voice_replies == "always" or (self.voice_replies == "auto" and was_voice)
         self.send(answer or "Сделал.", voice=speak)
+        self.sync_digest()          # записал с телефона — закреп сразу свежий
 
     def _poll_loop(self):
         while not self._stop.is_set():
@@ -258,6 +327,7 @@ class Phone:
             return False
         self._thread = threading.Thread(target=self._poll_loop, daemon=True)
         self._thread.start()
+        threading.Thread(target=self._digest_loop, daemon=True).start()
         return True
 
     def stop(self):

@@ -720,7 +720,9 @@ TOOLS += [
 
 
 def _t_disk(b):
-    return CL.disk_report()
+    # Сколько свободно — и сразу куда ушло: «сколько места» спрашивают, когда его мало
+    from skills import diskspace as DS
+    return CL.disk_report() + " " + DS.report(with_free=False)
 
 
 def _t_clean_preview(b):

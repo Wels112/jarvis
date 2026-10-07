@@ -438,6 +438,59 @@ def overdue(max_age_h: int = 72):
     return late
 
 
+# ---------------- сводка для телефона ----------------
+def digest(limit: int = 3800) -> str:
+    """Заметки и дела одним текстом — для закреплённого сообщения в Telegram.
+
+    Хозяин просил, чтобы заметки были под рукой и без интернета. Telegram
+    хранит переписку на телефоне и показывает её офлайн, так что закреплённая
+    сводка в чате с ботом и есть записная книжка без отдельного приложения.
+    Порядок — по важности: дела на неделю, потом заметки, потом факты; что не
+    влезло в предел сообщения, отрезается с конца.
+    """
+    now = datetime.now()
+    blocks = []
+
+    tasks = [t for t in _load(TASKS, []) if not t["done"] and not t.get("timer")]
+    soon = sorted((t for t in tasks if t["when"] and
+                   now - timedelta(hours=12) <= datetime.fromisoformat(t["when"]) <= now + timedelta(days=7)),
+                  key=lambda t: t["when"])
+    undated = [t for t in tasks if not t["when"]]
+    lines = [f"• {when_phrase(datetime.fromisoformat(t['when']))} — {t['text']}" for t in soon[:15]]
+    lines += [f"• без срока — {t['text']}" for t in undated[-10:]]
+    if lines:
+        blocks.append("Дела:\n" + "\n".join(lines))
+
+    try:
+        from skills import lessons
+        week = lessons.schedule_for("week")
+        if not week.startswith("На неделе занятий не"):
+            blocks.append("Уроки:\n" + week)
+    except Exception:
+        pass
+
+    notes = []
+    for md in sorted(NOTES_DIR.glob("*.md"), reverse=True):
+        day = f"{md.stem[8:10]}.{md.stem[5:7]}"
+        for line in reversed(md.read_text(encoding="utf-8").splitlines()):
+            text = line.lstrip("- ").replace("**", "").strip()
+            if text:
+                notes.append(f"• {day} {text}")
+        if len(notes) >= 20:
+            break
+    if notes:
+        blocks.append("Заметки:\n" + "\n".join(notes[:20]))
+
+    facts = _load(FACTS, [])
+    if facts:
+        blocks.append("Помню о тебе:\n" + "\n".join(f"• {f['text']}" for f in facts[-10:]))
+
+    text = "\n\n".join(blocks) if blocks else "Пока ни дел, ни заметок."
+    if len(text) > limit:
+        text = text[:limit].rsplit("\n", 1)[0] + "\n…"
+    return text
+
+
 # ---------------- история диалога ----------------
 def log_dialog(role: str, text: str, keep: int = 200):
     hist = _load(DIALOG, [])

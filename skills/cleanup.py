@@ -11,6 +11,7 @@ analyze() показывает, сколько где лежит, ничего �
 """
 import os
 import shutil
+import stat
 import sys
 import tempfile
 from pathlib import Path
@@ -19,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 LOCAL = Path(os.environ.get("LOCALAPPDATA", ""))
 WIN = Path(os.environ.get("SYSTEMROOT", "C:/Windows"))
+PROGRAMDATA = Path(os.environ.get("PROGRAMDATA") or "C:/ProgramData")
 
 # Каждый пункт: (описание, путь, только содержимое или папку целиком)
 SAFE = [
@@ -31,20 +33,45 @@ SAFE = [
     ("кэш npm", LOCAL / "npm-cache" / "_cacache", True),
     ("кэш Nvidia-шейдеров", LOCAL / "NVIDIA" / "DXCache", True),
     ("кэш DirectX-шейдеров", LOCAL / "D3DSCache", True),
+    # Лаунчеры оставляют скачанное после установки: у хозяина 07.10.2026 это
+    # 7,8 ГБ патчей Ubisoft и 7,0 ГБ пакетов драйвера NVIDIA. Понадобятся —
+    # скачаются заново. Свежее (идущая сейчас загрузка) не трогаем, см. MIN_AGE
+    ("кэш патчей Ubisoft", PROGRAMDATA / "Ubisoft" / "Ubisoft Game Launcher" / "patch", True),
+    ("скачанные обновления NVIDIA",
+     PROGRAMDATA / "NVIDIA Corporation" / "NVIDIA App" / "UpdateFramework" / "ota-artifacts", True),
 ]
+
+# Файл моложе суток может принадлежать работающей сейчас программе
+MIN_AGE = 24 * 3600
+REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+# Рабочие файлы сессий Claude Code: выводы фоновых команд, черновики. Возраст
+# тут не помогает — сессия идёт сутками, а нужен ей и вчерашний файл
+KEEP = {"claude"}
 
 
 def _dir_size(path: Path) -> int:
+    """Размер без захода в ссылки — тем же обходом, что и удаление (KEEP не считаем)."""
     total = 0
-    try:
-        for p in path.rglob("*"):
+    stack = [(str(path), True)]
+    while stack:
+        d, top = stack.pop()
+        try:
+            entries = list(os.scandir(d))
+        except OSError:
+            continue
+        for e in entries:
+            if top and e.name.lower() in KEEP:
+                continue
             try:
-                if p.is_file():
-                    total += p.stat().st_size
-            except (OSError, PermissionError):
-                pass
-    except (OSError, PermissionError):
-        pass
+                st = e.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            if getattr(st, "st_file_attributes", 0) & REPARSE or e.is_symlink():
+                continue
+            if stat.S_ISDIR(st.st_mode):
+                stack.append((e.path, False))
+            else:
+                total += st.st_size
     return total
 
 
@@ -84,32 +111,61 @@ def clean(dry_run: bool = False) -> str:
         return (f"Могу освободить примерно {_gb(report['total'])} ГБ: "
                 + "; ".join(lines) + ".")
 
-    # Файлы моложе часа почти наверняка принадлежат работающей прямо сейчас
-    # программе. Удалить их технически можно, но это ломает живые процессы —
-    # проверено на себе: очистка снесла временные файлы активной сессии.
-    import time as _time
-    fresh_cutoff = _time.time() - 3600
-
-    failed = 0
-    for _label, path, _size in report["items"]:
-        try:
-            for item in path.iterdir():
-                try:
-                    if item.stat().st_mtime > fresh_cutoff:
-                        continue
-                    if item.is_dir():
-                        shutil.rmtree(item, ignore_errors=True)
-                    else:
-                        item.unlink(missing_ok=True)
-                except (OSError, PermissionError):
-                    failed += 1
-        except (OSError, PermissionError):
-            failed += 1
-
+    failed = sum(_clean_dir(path) for _label, path, _size in report["items"])
     after, _ = free_space("C:")
     removed = max(0, after - before)
-    tail = f" Часть файлов занята системой и осталась." if failed else ""
+    tail = (" Часть файлов занята программами или требует прав администратора — осталась."
+            if failed else "")
     return f"Освободил {_gb(removed)} ГБ на диске C.{tail}"
+
+
+def _clean_dir(path: Path, now: float = None) -> int:
+    """Удалить внутри path файлы старше MIN_AGE и опустевшие папки. Вернуть число неудач.
+
+    Возраст смотрим у каждого файла, а не у папки верхнего уровня: дата папки
+    меняется, только когда в ней самой появляется или пропадает запись, и не
+    меняется, когда пишут в файлы глубже. Прежняя проверка «папка старше часа —
+    сносим целиком» так и снесла рабочие файлы живой сессии Claude Code.
+
+    Обход свой, а не os.walk: тот не заходит в символические ссылки, но заходит
+    в точки соединения (junction) — и ссылка из Temp на папку с играми стоила бы
+    этой папки. В ссылки любого вида не заходим и сами ссылки не трогаем.
+    """
+    import time as _time
+    cutoff = (now or _time.time()) - MIN_AGE
+    failed = 0
+
+    def sweep(d: str, top: bool) -> None:
+        nonlocal failed
+        try:
+            entries = list(os.scandir(d))
+        except OSError:
+            failed += 1
+            return
+        for e in entries:
+            if top and e.name.lower() in KEEP:
+                continue
+            try:
+                st = e.stat(follow_symlinks=False)
+                if getattr(st, "st_file_attributes", 0) & REPARSE or e.is_symlink():
+                    continue
+                if stat.S_ISDIR(st.st_mode):
+                    sweep(e.path, False)
+                    try:
+                        os.rmdir(e.path)        # только пустую: со свежими файлами не выйдет
+                    except OSError:
+                        pass
+                elif st.st_mtime < cutoff:
+                    try:
+                        os.unlink(e.path)
+                    except PermissionError:     # «только чтение» Windows не удаляет
+                        os.chmod(e.path, stat.S_IWRITE)
+                        os.unlink(e.path)
+            except OSError:
+                failed += 1
+
+    sweep(str(path), True)
+    return failed
 
 
 def disk_report() -> str:

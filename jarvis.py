@@ -140,6 +140,12 @@ class Jarvis:
             files.start_background()
         except Exception as e:
             print(f"[файлы] список не строится: {e}")
+        try:
+            # Что занимает место на C: — тоже в фоне: обход диска идёт около минуты
+            from skills import diskspace
+            diskspace.start_background()
+        except Exception as e:
+            print(f"[диск] замер не идёт: {e}")
 
     # ---------- речь ----------
     def say(self, text: str):
@@ -374,6 +380,7 @@ class Jarvis:
         знал и молчал. Предупреждаем не чаще раза в шесть часов, чтобы не нудить.
         """
         from skills import cleanup as CL
+        from skills import diskspace as DS
         try:
             free, _total = CL.free_space("C:")
         except Exception:
@@ -382,9 +389,17 @@ class Jarvis:
         now = time.time()
         if gb >= DISK_WARN_GB or now - getattr(self, "_disk_warned_at", 0) < 6 * 3600:
             return
+        # Сказать сразу, куда ушло место: «почисти временные файлы» при 74 ГБ
+        # игры на диске — не помощь. Замер идёт в фоне около минуты; первые три
+        # минуты после запуска ждём его, дальше предупреждаем и без него
+        hint = DS.top_phrase()
+        self._disk_check_since = getattr(self, "_disk_check_since", None) or now
+        if not hint and now - self._disk_check_since < 180:
+            return
         self._disk_warned_at = now
         self.notify(f"На диске C осталось {gb:.1f} гигабайта — это мало, Windows может начать "
-                    "тормозить. Скажи «почисти диск», и я уберу временные файлы.")
+                    f"тормозить. {hint + ' ' if hint else ''}Скажи «почисти диск» — уберу мусор, "
+                    "или «что занимает место» — расскажу подробнее.")
 
     def _tell_today(self):
         """Что впереди за сегодня — одной фразой, и только если есть что сказать.

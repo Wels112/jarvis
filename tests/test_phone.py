@@ -51,6 +51,7 @@ def main():
 
     phone = Phone(j)
     phone.token, phone.owner = "тест", OWNER
+    phone.pinned = False        # сводка проверяется отдельно, в разделе 7
     fake = FakePhone(phone)
     j.phone = phone
     errors = 0
@@ -123,6 +124,64 @@ def main():
     ok = any("рамстры" in t for t in fake.texts()) and any("рамстры" in s for s in spoken)
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} напоминание пришло и в телефон, и вслух")
+
+    # 7. Закреплённая сводка: одно сообщение, правится на месте, только при изменениях
+    from core import memory
+    phone.pinned = True
+    phone.STATE = Path("D:/pytmp/test_phone_digest.json")
+    phone.STATE.unlink(missing_ok=True)
+    body = ["Дела:\n• завтра в 10:00 — позвонить маме"]
+    real_digest = memory.digest
+    memory.digest = lambda limit=3800: body[0]
+    calls, edit_ok, next_id = [], [True], [77]
+
+    def call(method, _wait=20, _files=None, **p):
+        calls.append((method, p))
+        if method == "sendMessage":
+            next_id[0] += 1
+            return {"message_id": next_id[0]}
+        if method == "editMessageText":
+            return {"message_id": p["message_id"]} if edit_ok[0] else None
+        return True
+    phone._call = call
+
+    def names():
+        out = [m for m, _ in calls]
+        calls.clear()
+        return out
+
+    try:
+        phone.sync_digest()
+        first = calls[0][1].get("text", "") if calls else ""
+        step1 = names()
+        phone.sync_digest()
+        step2 = names()
+        body[0] += "\n• в пятницу в 18:00 — урок"
+        phone.sync_digest()
+        step3 = names()
+        edit_ok[0] = False                  # хозяин удалил закреп
+        body[0] += "\nЗаметки:\n• 07.10 купить фильтр"
+        phone.sync_digest()
+        step4 = names()
+        phone._handle({"chat": {"id": OWNER}, "text": "/notes"})
+        step5 = calls[:]
+        names()
+    finally:
+        memory.digest = real_digest
+        phone.STATE.unlink(missing_ok=True)
+
+    checks = [
+        ("первый раз — прислал и закрепил", step1 == ["sendMessage", "pinChatMessage"]
+         and "📌" in first and "обновлено" in first and "позвонить маме" in first),
+        ("ничего не поменялось — тишина", step2 == []),
+        ("поменялось — правит то же сообщение", step3 == ["editMessageText"]),
+        ("сообщение удалили — новое и закреп", step4 == ["editMessageText", "sendMessage", "pinChatMessage"]),
+        ("/notes — свежий закреп и ответ", [m for m, _ in step5] == ["sendMessage", "pinChatMessage", "sendMessage"]
+         and "без интернета" in step5[-1][1].get("text", "")),
+    ]
+    for name, ok in checks:
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} сводка: {name}")
 
     print(f"\nошибок: {errors}")
     return errors == 0

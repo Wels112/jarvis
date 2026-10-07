@@ -51,4 +51,7 @@ train/data/honesty.jsonl
 
 # --- настройки Claude Code для разработки (в т.ч. из ECC): только у себя ---
 .claude/
+
+# --- списки файлов и папок с дисков хозяина: имена говорят о нём больше, чем кажется ---
 data/files_index.json
+data/disk_usage*.json

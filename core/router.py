@@ -24,6 +24,7 @@ from skills import youtube as YT
 from skills import telegram as TG
 from skills import weather as W
 from skills import cleanup as CL
+from skills import diskspace as DS
 from skills import tools as TL
 from skills import lessons as LS
 from core import corrections
@@ -279,6 +280,11 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.media_key("prev"))
 
     # --- место на диске и очистка ---
+    # «Что занимает» — раньше общего «сколько места»: спрашивают не сколько, а куда ушло
+    if re.search(r"(что|чем|кто)\s+(\w+\s+){0,2}(занима\w*|забит\w*|съел\w*|жр[её]т)\s*(\w+\s+){0,2}(мест\w*|диск\w*)"
+                 r"|(что|чем)\s+(\w+\s+){0,2}мест\w*\s+(занима|съел|сожр)\w*"
+                 r"|куда (делось|ушло|пропало) место|(чем|что) (забит|заполнен)\w* диск", t):
+        return Reply(say=DS.report())
     if re.search(r"(сколько (свободного )?места|что с диск\w+|заполнен\w* диск)", t):
         return Reply(say=CL.disk_report())
     if re.search(r"(что можно (почистить|удалить)|сколько мусора|проверь диск)", t):
