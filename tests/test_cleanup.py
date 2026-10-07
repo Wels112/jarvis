@@ -72,6 +72,31 @@ def main():
     # Ссылку убираем как ссылку (rmdir), иначе rmtree пошёл бы внутрь
     os.rmdir(box / "link_out")
     shutil.rmtree(BASE)
+
+    # Честный отчёт: что освободил и что Windows не дала (файл занят — как без прав)
+    a, b = BASE / "cache_a", BASE / "cache_b"
+    for i in range(3):
+        touch(a / f"old{i}.bin", 48)
+        touch(b / f"old{i}.bin", 48)
+    real = (CL.SAFE, CL.BLOCKED, CL.MIN_REPORT, CL.MIN_REFUSED)
+    CL.SAFE = [("кэш А", a, True), ("кэш Б", b, True)]
+    CL.BLOCKED, CL.MIN_REPORT, CL.MIN_REFUSED = BASE / "blocked.json", 100, 100
+    handles = [open(b / f"old{i}.bin", "rb") for i in range(3)]    # держим — удалить нельзя
+    try:
+        said = CL.clean()
+        preview = CL.clean(dry_run=True)
+    finally:
+        for h in handles:
+            h.close()
+        CL.SAFE, CL.BLOCKED, CL.MIN_REPORT, CL.MIN_REFUSED = real
+    print(f"    после очистки: «{said}»\n    оценка потом: «{preview}»")
+    for name, ok in (("отчёт называет освобождённое", "кэш А" in said.split("Не смог")[0]),
+                     ("и честно — что не дали", "Не смог очистить: кэш Б" in said),
+                     ("в следующей оценке не обещает недоступное",
+                      "кэш Б" not in preview.split("Ещё")[0] and "нужны права администратора" in preview)):
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} {name}")
+    shutil.rmtree(BASE)
     print(f"\nошибок: {errors}")
     return errors == 0
 

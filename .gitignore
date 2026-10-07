@@ -55,3 +55,4 @@ train/data/honesty.jsonl
 # --- списки файлов и папок с дисков хозяина: имена говорят о нём больше, чем кажется ---
 data/files_index.json
 data/disk_usage*.json
+data/cleanup_blocked.json

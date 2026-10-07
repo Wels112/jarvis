@@ -14,12 +14,17 @@ import re
 from datetime import datetime, timedelta, date
 from pathlib import Path
 
+from core.log import TAG as _RUN_TAG
+
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN = ROOT / "data" / "brain"
 FACTS = BRAIN / "facts.json"
 TASKS = BRAIN / "tasks.json"
 NOTES_DIR = BRAIN / "notes"
-DIALOG = BRAIN / "dialog_history.json"
+# Прогоны тестов пишут разговор в свой файл. Раньше «почисти диск от мусора»,
+# «Освободил 0.5 ГБ (заглушка теста)» и прочее из тестов ложились в настоящий
+# журнал — а его теперь читает модель как недавний разговор с хозяином
+DIALOG = BRAIN / ("dialog_history.test.json" if _RUN_TAG else "dialog_history.json")
 
 BRAIN.mkdir(parents=True, exist_ok=True)
 NOTES_DIR.mkdir(parents=True, exist_ok=True)

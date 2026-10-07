@@ -9,6 +9,7 @@
 analyze() показывает, сколько где лежит, ничего не удаляя. clean() удаляет
 только перечисленное в SAFE и возвращает отчёт.
 """
+import json
 import os
 import shutil
 import stat
@@ -44,6 +45,11 @@ SAFE = [
 # Файл моложе суток может принадлежать работающей сейчас программе
 MIN_AGE = 24 * 3600
 REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+# Что Windows не дала удалить: в оценку не входит месяц, потом попробуем снова
+BLOCKED = Path(__file__).resolve().parent.parent / "data" / "cleanup_blocked.json"
+BLOCKED_DAYS = 30
+MIN_REPORT = 20 * 2 ** 20      # мельче не стоит упоминания
+MIN_REFUSED = 100 * 2 ** 20    # столько осталось при неудачах — значит, не дали удалить
 # Рабочие файлы сессий Claude Code: выводы фоновых команд, черновики. Возраст
 # тут не помогает — сессия идёт сутками, а нужен ей и вчерашний файл
 KEEP = {"claude"}
@@ -79,19 +85,39 @@ def _gb(n: int) -> float:
     return round(n / 2 ** 30, 2)
 
 
+def _blocked() -> dict:
+    """Что Windows не дала удалить в прошлый раз: {описание: когда}."""
+    try:
+        data = json.loads(BLOCKED.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    import time as _time
+    return {k: v for k, v in data.items() if _time.time() - v < BLOCKED_DAYS * 86400}
+
+
 def analyze() -> dict:
-    """Сколько можно освободить, ничего не удаляя."""
-    found = []
+    """Сколько можно освободить, ничего не удаляя.
+
+    То, что в прошлый раз удалить не дали (нужны права администратора), в
+    обещание не входит: 07.10.2026 Джарвис посулил «около 16 гигабайт», а
+    половина лежала там, куда ему не дотянуться.
+    """
+    found, blocked = [], []
     total = 0
+    no_access = _blocked()
     for label, path, _content_only in SAFE:
         if not path.exists():
             continue
         size = _dir_size(path)
-        if size > 20 * 2 ** 20:            # мельче 20 МБ не стоит упоминания
+        if size <= MIN_REPORT:
+            continue
+        if label in no_access:
+            blocked.append((label, path, size))
+        else:
             found.append((label, path, size))
             total += size
     found.sort(key=lambda x: -x[2])
-    return {"items": found, "total": total}
+    return {"items": found, "total": total, "blocked": blocked}
 
 
 def free_space(drive: str = "C:") -> tuple:
@@ -99,24 +125,59 @@ def free_space(drive: str = "C:") -> tuple:
     return usage.free, usage.total
 
 
+def _gb_say(n: int) -> str:
+    v = n / 2 ** 30
+    return f"{v:.0f}" if v >= 10 or abs(v - round(v)) < 0.05 else f"{v:.1f}".replace(".", ",")
+
+
 def clean(dry_run: bool = False) -> str:
     """Удаляет только безопасное. dry_run — посчитать, но не трогать."""
     before, _ = free_space("C:")
     report = analyze()
+    blocked = report["blocked"]
+    no_rights = ("Ещё " + _gb_say(sum(s for *_x, s in blocked)) + " ГБ — "
+                 + ", ".join(label for label, *_ in blocked)
+                 + " — удалить мне не дают: нужны права администратора.") if blocked else ""
     if not report["items"]:
-        return "Чистить нечего, мусора почти нет."
+        return ("Чистить нечего, мусора почти нет. " + no_rights).strip()
 
     if dry_run:
-        lines = [f"{label} — {_gb(size)} ГБ" for label, _p, size in report["items"][:6]]
-        return (f"Могу освободить примерно {_gb(report['total'])} ГБ: "
-                + "; ".join(lines) + ".")
+        lines = [f"{label} — {_gb_say(size)} ГБ" for label, _p, size in report["items"][:6]]
+        return (f"Могу освободить примерно {_gb_say(report['total'])} ГБ: "
+                + "; ".join(lines) + ". " + no_rights).strip()
 
-    failed = sum(_clean_dir(path) for _label, path, _size in report["items"])
+    # По пунктам: что освободилось и что Windows не дала тронуть. Одна общая цифра
+    # прятала провал: «освободил 0,1 ГБ» при обещанных шестнадцати
+    done, refused = [], []
+    for label, path, size in report["items"]:
+        failed = _clean_dir(path)
+        left = _dir_size(path)
+        freed = max(0, size - left)
+        if freed >= MIN_REPORT:
+            done.append((label, freed))
+        if failed and left > size * 0.9 and left > MIN_REFUSED:
+            refused.append((label, left))
+    _remember_blocked([label for label, _ in refused])
     after, _ = free_space("C:")
     removed = max(0, after - before)
-    tail = (" Часть файлов занята программами или требует прав администратора — осталась."
-            if failed else "")
-    return f"Освободил {_gb(removed)} ГБ на диске C.{tail}"
+    text = f"Освободил {_gb_say(removed)} ГБ на диске C"
+    text += (": " + "; ".join(f"{label} — {_gb_say(n)} ГБ" for label, n in done) + ".") if done else "."
+    if refused:
+        text += (" Не смог очистить: " + ", ".join(f"{label} ({_gb_say(n)} ГБ)" for label, n in refused)
+                 + " — Windows не дала, нужны права администратора.")
+    return text
+
+
+def _remember_blocked(labels):
+    import time as _time
+    data = _blocked()
+    for label in labels:
+        data[label] = _time.time()
+    try:
+        BLOCKED.parent.mkdir(parents=True, exist_ok=True)
+        BLOCKED.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _clean_dir(path: Path, now: float = None) -> int:

@@ -54,6 +54,29 @@ WEEKDAYS = ["понедельник", "вторник", "среда", "четв�
 MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
           "августа", "сентября", "октября", "ноября", "декабря"]
 
+# Сторож честности. 07.10.2026 живая модель дважды сказала хозяину «в телегу
+# продублировал», хотя инструмент вернул «Telegram не подключён». Закон
+# честности в инструкции она прочла — и всё равно соврала. Поэтому проверяем
+# сами: в этом ходе инструмент отказал, а вслух прозвучало «сделал» — просим
+# поправиться тут же, тем же голосом.
+TOOL_FAILED = re.compile(
+    r"^\s*(не |ошибка)|\bне\s+(получ|вышл|удал|смог|принял|наш[её]л|найд|подключ|останов|"
+    r"включ|открыл|отправ|сработ|выполн)|недоступ|ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ|вслух не сказал", re.I)
+CLAIMED = re.compile(r"\b(отправил|отправлено|продублировал|переслал|скинул|прислал|сделал|"
+                     r"сделано|готово|записал|исправил|включил|открыл|нажал|удалил|поставил|"
+                     r"добавил|остановил|выключил|закрыл)\w*", re.I)
+ADMITTED = re.compile(r"\bне\s+(получ|вышл|удал|смог|отправ|подключ|сдела|наш[её]л|могу|"
+                      r"сработ|дош[её]л|ушл)|к сожалению|\bувы\b|не получится", re.I)
+
+
+def false_claim(said: str, failures) -> str:
+    """Что сказать модели, если она заявила успех вопреки отказу инструмента; иначе ''."""
+    if not (failures and said and CLAIMED.search(said)) or ADMITTED.search(said):
+        return ""
+    name, result = failures[-1]
+    return (f"(Система, не хозяин: инструмент {name} вернул «{result}», а ты сказал хозяину, "
+            "что всё получилось. Это неправда. Одной короткой фразой честно поправься.)")
+
 PERSONA = """Ты — Джарвис, голосовой помощник. Вы с хозяином разговариваете вслух, по-человечески.
 
 Как говорить:
@@ -268,6 +291,7 @@ class LiveConversation:
         self._brain = None
         self.t_sent = None
         self.t_first_audio = None
+        self.turn_failures = []
 
         # Свой постоянный цикл событий в фоновом потоке: подключение можно начать
         # заранее из потока ушей и подхватить, когда выяснится, что звали Джарвиса
@@ -376,6 +400,11 @@ class LiveConversation:
             if self._player:
                 self._player.close()
                 self._player = None
+            # Вопрос «делать ли?» без ответа умирает вместе с разговором: иначе «да»
+            # в следующем разговоре выполнило бы давно забытое действие
+            if self._brain is not None and self._brain.pending_confirm is not None:
+                log.write("info", f"разговор закрыт без ответа — отменил: {self._brain.pending_confirm[0]}")
+                self._brain.pending_confirm = None
 
     @property
     def brain(self):
@@ -441,6 +470,7 @@ class LiveConversation:
         self.ending = False
         self.user_turn = ""
         self.said_turn = ""
+        self.turn_failures = []              # отказы инструментов в текущем ходе — для сторожа честности
         self.heard_since_pending = ""
         self.pending_since = None
         self.last_user_at = time.monotonic()
@@ -668,6 +698,8 @@ class LiveConversation:
                 result = await self._run_tool(fc.name, args)
             except Exception as e:
                 result = f"ошибка: {e}"
+            if fc.name not in ("end_conversation", "confirm_pending") and TOOL_FAILED.search(str(result)):
+                self.turn_failures.append((fc.name, str(result)[:160]))
             responses.append(types.FunctionResponse(
                 id=fc.id, name=fc.name, response={"result": str(result)[:2000]}))
         await session.send_tool_response(function_responses=responses)
@@ -727,4 +759,9 @@ class LiveConversation:
             print(f"🗣 {text}{mark}")
             log.said(text + mark)
             memory.log_dialog("jarvis", text)
+        correction = false_claim(text, getattr(self, "turn_failures", []))
+        if correction and not interrupted:
+            log.write("info", f"честность: сказал «{text[:60]}», а инструмент отказал — прошу поправиться")
+            self.inject(correction)
+        self.turn_failures = []
         self.said_turn = ""

@@ -85,6 +85,7 @@ FALLBACK_MODELS = ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-
 # Коды, при которых есть смысл попробовать другую модель, а не сдаваться:
 # перегрузка, исчерпанный лимит конкретной модели, модель выведена из обращения
 RETRYABLE = {429, 500, 503, 404}
+PENDING_TTL = 120     # вопрос «делать ли?» без ответа дольше двух минут считается брошенным
 
 
 class Brain:
@@ -97,6 +98,7 @@ class Brain:
         self.key = config.env("GEMINI_API_KEY")
         self.history = []
         self.pending_confirm = None      # (описание, функция)
+        self.pending_at = 0.0            # когда задан вопрос; брошенный через PENDING_TTL не мешает
         self.last_model = None           # кто реально ответил — для журнала
 
     @property
@@ -194,11 +196,23 @@ class Brain:
         # обычный мозг нет: разбирать, почему он «не смог открыть калькулятор»,
         # приходилось вслепую (05.10.2026)
         from core import log
+        import time
+        before = self.pending_confirm
         try:
             fn = TOOL_IMPL.get(name)
             result = f"нет такого инструмента: {name}" if not fn else str(fn(self, **args))
         except Exception as e:
             result = f"ошибка инструмента {name}: {type(e).__name__}: {e}"
+        # Одно опасное действие за раз. 07.10.2026 на «почисти диск и удали Far Cry»
+        # второй запрос подтверждения затёр первый: на «да» выполнилось одно
+        # удаление, очистка пропала молча, а модель сказала «диск почистил»
+        if self.pending_confirm is not before and self.pending_confirm is not None:
+            if before is not None and time.time() - self.pending_at < PENDING_TTL:
+                self.pending_confirm = before
+                result = (f"НЕ ПРИНЯТО: хозяин ещё не ответил про «{before[0]}». Сначала спроси об "
+                          "этом и дождись ответа; это действие предложи после.")
+            else:
+                self.pending_at = time.time()
         log.write("tool", f"{name} {args} → {result[:100]}")
         return result
 
