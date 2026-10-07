@@ -627,12 +627,46 @@ class Jarvis:
                 self.tray.stop()
 
 
+_MUTEX = None
+
+
+def _single_instance() -> bool:
+    """Первый ли это голосовой Джарвис на компьютере.
+
+    Два сразу — беда: оба слушают один микрофон и отвечают хором, а бот в
+    Telegram отдаёт сообщения только одному из них (второй получает «409»).
+    Второй запуск случается легко: автозапуск плюс ярлык, двойной щелчок.
+    """
+    global _MUTEX
+    try:
+        import win32api
+        import win32event
+        import winerror
+    except ImportError:
+        return True
+    _MUTEX = win32event.CreateMutex(None, False, "Local\\JarvisVoiceAssistant")
+    return win32api.GetLastError() != winerror.ERROR_ALREADY_EXISTS
+
+
 def main():
     config.setup_console()
     ap = argparse.ArgumentParser(description="Джарвис")
     ap.add_argument("--text", action="store_true", help="текстовый режим без микрофона")
     ap.add_argument("--once", metavar="КОМАНДА", help="выполнить одну команду и выйти")
     args = ap.parse_args()
+
+    if not args.text and not args.once and not _single_instance():
+        print("Джарвис уже запущен — второй не нужен: окно «Jarvis» или иконка у часов.")
+        try:
+            import win32gui
+            hwnd = win32gui.FindWindow(None, "Jarvis")
+            if hwnd:
+                win32gui.ShowWindow(hwnd, 9)          # SW_RESTORE
+                win32gui.SetForegroundWindow(hwnd)
+        except Exception:
+            pass
+        time.sleep(3)                                 # чтобы успеть прочитать, почему окно закрылось
+        return
 
     j = Jarvis(voice_mode=not args.text)
 
