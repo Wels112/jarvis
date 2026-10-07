@@ -96,8 +96,9 @@ def main():
     # Действие на словах без единого инструмента: «Уже нажимаю» (проверка 07.10.2026)
     from core.honesty import unbacked_claim
     for said, tools, want in (("Уже нажимаю.", 0, True), ("Открываю YouTube.", 0, True),
-                              ("Нажал.", 1, False), ("Не могу нажать — кнопки не вижу.", 0, False),
-                              ("Привет! Чем помочь?", 0, False), ("Сейчас включу.", 0, False)):
+                              ("Нажимаю.", 1, False), ("Не могу нажать — кнопки не вижу.", 0, False),
+                              ("Привет! Чем помочь?", 0, False), ("Сейчас включу.", 0, False),
+                              ("Да, записал утром — в 20:00 ученик.", 0, False)):    # рассказ о прошлом
         got = bool(unbacked_claim(said, tools))
         errors += got != want
         print(f"{'ok ' if got == want else 'НЕТ'} без инструмента «{said}» ({tools} вызовов): "
