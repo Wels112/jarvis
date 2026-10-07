@@ -398,7 +398,10 @@ class Phone:
         new = [t for t in self._timed_tasks() if t["id"] not in seen]
         for t in new:
             when = memory.when_phrase(datetime.fromisoformat(t["when"]))
-            self.send(f"📌 Записал: {t['text']} — {when}. Напомню здесь.")
+            if t.get("do"):
+                self.send(f"📌 По плану: {t['text']} — {when}. Выполню на компьютере.")
+            else:
+                self.send(f"📌 Записал: {t['text']} — {when}. Напомню здесь.")
         if new:
             self.mark_tasks_seen()
         return len(new)
@@ -554,9 +557,21 @@ class Phone:
             text = {"/start": "привет", "/help": "что ты умеешь",
                     "/tasks": "какие у меня задачи"}.get(text.split()[0], text.lstrip("/"))
 
-        self._call("sendChatAction", chat_id=chat, action="typing")
         log.write("info", f"[телефон] {text[:80]}")
-        answer = self.j.answer_text(text, source="phone")
+        # «Печатает…» в Telegram гаснет через 5 секунд, а своя модель без сети
+        # думает и полминуты — без повторов казалось, что бот завис
+        done = threading.Event()
+
+        def typing():
+            while True:
+                self._call("sendChatAction", chat_id=chat, action="typing")
+                if done.wait(4):
+                    return
+        threading.Thread(target=typing, daemon=True).start()
+        try:
+            answer = self.j.answer_text(text, source="phone")
+        finally:
+            done.set()
         speak = self.voice_replies == "always" or (self.voice_replies == "auto" and was_voice)
         self.send(answer or "Сделал.", voice=speak)
         self.mark_tasks_seen()      # записанное с телефона уже подтверждено ответом

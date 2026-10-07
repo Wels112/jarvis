@@ -5,6 +5,10 @@
 чужое состояние (подменённые функции, временные файлы) не протекает. Пробы
 (probe_*, bench_*) сюда не входят — они долгие и меряют, а не проверяют.
 Звук системы и настоящие дела хозяина тесты не трогают.
+
+Наборы, которые по-настоящему открывают окна (Калькулятор, Блокнот), идут
+только по слову «окна»: run_all.py окна. Иначе прогон посреди работы хозяина
+выскакивал у него на экране.
 """
 import subprocess
 import sys
@@ -13,20 +17,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUITES = [
-    "test_reminders", "test_late_reminders", "test_announce", "test_phone", "test_safety",
+    "test_reminders", "test_late_reminders", "test_plans", "test_announce", "test_phone",
+    "test_phone_voice", "test_safety",
     "test_one_pending", "test_honesty_guard", "test_live_fallback", "test_hands_aware",
-    "test_hybrid_brain", "test_files", "test_apps", "test_ui", "test_search",
+    "test_hybrid_brain", "test_files", "test_search",
     "test_cleanup", "test_diskspace", "test_uninstall", "test_tg_desktop",
     "test_speakable", "test_wake_name", "test_reconnect", "test_voice_pipeline",
     "test_single_instance",
 ]
+WINDOWS = ["test_apps", "test_ui"]       # открывают и закрывают настоящие окна
 
 
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
-    only = sys.argv[1:]
+    only = [a for a in sys.argv[1:] if a != "окна"]
+    suites = SUITES + (WINDOWS if "окна" in sys.argv[1:] else [])
     failed = []
-    for name in SUITES:
+    for name in suites:
         if only and not any(o in name for o in only):
             continue
         start = time.time()

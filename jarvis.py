@@ -94,7 +94,8 @@ def late_phrases(late: list, at_start: bool, now=None) -> list:
         out = [(ring_phrase(t), t) for t in late if (now - when(t)).total_seconds() < 600]
         late = [t for t in late if (now - when(t)).total_seconds() >= 600]
     if late:
-        parts = [f"{t['text']} — {memory.when_phrase(when(t))}" for t in late[:3]]
+        parts = [f"«{t['do']}» — {memory.when_phrase(when(t))} (не выполнил)" if t.get("do")
+                 else f"{t['text']} — {memory.when_phrase(when(t))}" for t in late[:3]]
         more = f" И ещё {len(late) - 3}." if len(late) > 3 else ""
         lead = ("Пока меня не было, ты просил напомнить" if at_start
                 else "Опоздал: компьютер, похоже, спал. Ты просил напомнить")
@@ -436,14 +437,24 @@ class Jarvis:
         только когда ждать действительно приходится.
         """
         result = {}
-        worker = threading.Thread(target=lambda: result.setdefault("a", self.brain.ask(text)),
-                                  daemon=True)
+
+        def ask():
+            try:
+                result["a"] = self.brain.ask(text)
+            except Exception as e:                # иначе падение мозга выглядело как пустой ответ
+                log.write("error", f"[мозг] {type(e).__name__}: {str(e)[:120]}")
+        worker = threading.Thread(target=ask, daemon=True)
         worker.start()
         worker.join(FILLER_AFTER)
-        if worker.is_alive() and not self._quiet:     # в чате «Секунду.» перед ответом — лишнее
-            self.say("Секунду.")
+        if worker.is_alive():
+            if not self._quiet:           # в чате «Секунду.» перед ответом — лишнее
+                self.say("Секунду.")
+            # Ждать ответа — всегда. 07.10.2026 ожидание стояло под тем же
+            # условием, и телефон через 2 секунды получал «Не получилось ответить»,
+            # а мозг тем временем молча записывал дело и находил список планов
             worker.join()
-        return result.get("a") or "Не получилось ответить."
+        return result.get("a") or ("Не получилось ответить: умный режим промолчал. "
+                                   "Простые команды — дела, видео, программы — работают и так.")
 
     # ---------- фоновые напоминания ----------
     def _check_disk(self):
@@ -520,13 +531,48 @@ class Jarvis:
 
         Через notify, а не say: Джарвиса включили, а хозяина дома может и не быть.
         """
+        from datetime import datetime
         try:
             late = memory.overdue()
         except Exception as e:
             print(f"[будильник] просроченные: {e}")
             return
+        # Отложенная команда, опоздавшая на минуты, ещё к месту — выполняем.
+        # Опоздавшую на часы (компьютер спал) — не выполняем, а говорим об этом
+        for t in [t for t in late if t.get("do")]:
+            if (datetime.now() - datetime.fromisoformat(t["when"])).total_seconds() < 600:
+                late.remove(t)
+                self._run_planned(t)
         for text, task in late_phrases(late, at_start):
             self.notify(text, task)
+
+    def _run_planned(self, t: dict):
+        """Отложенная команда пришла в срок: выполнить, как будто сказана сейчас.
+
+        Опасное («выключи», «удали») без хозяина не делаем: в срок его может не
+        быть рядом, чтобы сказать «да», — честно говорим, что ждёт подтверждения.
+        """
+        cmd = t["do"]
+        memory.finish(t["id"])                      # второй раз не выполнится
+        log.write("info", f"[по плану] {cmd}")
+        try:
+            with self._talk_lock:
+                reply = router.handle(router.normalize(cmd), self.cfg)
+                if reply.pending:
+                    result = "это нужно подтвердить — скажи ещё раз, если всё ещё нужно"
+                elif reply.to_llm and self.brain and self.brain.ready:
+                    result = self._think(cmd)
+                    if self.brain.pending_confirm:
+                        self.brain.pending_confirm = None
+                        result = "это нужно подтвердить — скажи ещё раз, если всё ещё нужно"
+                elif reply.to_llm:
+                    result = "так я не умею без умного режима"
+                else:
+                    result = reply.say or "сделано"
+        except Exception as e:
+            log.write("error", f"[по плану] {cmd}: {type(e).__name__} {str(e)[:90]}")
+            result = "не получилось — посмотри журнал"
+        self.notify(f"По плану: {cmd}. {result[:1].upper() + result[1:]}")
 
     def _reminder_loop(self):
         # 10 секунд, а не 30: таймер, опоздавший на полминуты, уже бесполезен
@@ -537,7 +583,10 @@ class Jarvis:
         while self.running:
             try:
                 for t in memory.due_now(window_min=0.2):
-                    self.notify(ring_phrase(t), t)
+                    if t.get("do"):
+                        self._run_planned(t)
+                    else:
+                        self.notify(ring_phrase(t), t)
             except Exception as e:
                 print(f"[будильник] {e}")
             # Срок проскочил окно: компьютер спал или круг затянулся

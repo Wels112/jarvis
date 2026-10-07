@@ -70,6 +70,8 @@ def main():
     config.setup_console()
     from faster_whisper import WhisperModel
     from core import router
+    from tests import sandbox
+    sandbox.enable()        # разбираем по-настоящему, но Блокнот и громкость не трогаем
 
     print("=" * 66)
     print("  СКВОЗНОЙ ТЕСТ: синтез → распознавание → разбор команды")
@@ -112,7 +114,9 @@ def main():
     print(f"  Понято и выполнено: {good} из {len(FRASES)}")
     print(f"  Скорость распознавания: {total_rt/max(len(FRASES),1):.2f}x от длины фразы")
     print("=" * 66)
+    print(f"\nошибок: {len(FRASES) - good}")
+    return good == len(FRASES)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(0 if main() else 1)

@@ -18,9 +18,13 @@ from core.log import TAG as _RUN_TAG
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN = ROOT / "data" / "brain"
-FACTS = BRAIN / "facts.json"
-TASKS = BRAIN / "tasks.json"
-NOTES_DIR = BRAIN / "notes"
+# Прогоны тестов держат дела, заметки и факты в своей папке. Живой Джарвис раз
+# в минуту сверяет дела и объявляет новые в Telegram — тестовое «купить хлеб»,
+# записанное в настоящий список хоть на секунду, ушло бы хозяину в чат
+STORE = BRAIN / "test" if _RUN_TAG else BRAIN
+FACTS = STORE / "facts.json"
+TASKS = STORE / "tasks.json"
+NOTES_DIR = STORE / "notes"
 # Прогоны тестов пишут разговор в свой файл. Раньше «почисти диск от мусора»,
 # «Освободил 0.5 ГБ (заглушка теста)» и прочее из тестов ложились в настоящий
 # журнал — а его теперь читает модель как недавний разговор с хозяином
@@ -50,6 +54,11 @@ def _save(path: Path, data):
 # ---------------- факты ----------------
 def remember(text: str, tag: str = "общее") -> str:
     facts = _load(FACTS, [])
+    # Тот же факт второй раз не пишем: «я работаю по ночам» лежал 19 раз и
+    # занимал весь блок «Помню о тебе» в закрепе
+    same = text.strip().lower().replace("ё", "е")
+    if any(f["text"].lower().replace("ё", "е") == same for f in facts):
+        return "Это я уже помню."
     facts.append({"text": text.strip(), "tag": tag,
                   "when": datetime.now().isoformat(timespec="seconds")})
     _save(FACTS, facts)
@@ -161,10 +170,12 @@ def _relative(t: str, now: datetime):
         return now + timedelta(minutes=30)
     qty = "|".join(sorted(QTY, key=len, reverse=True))
     units = "|".join(u for u, _ in UNITS)
-    m = re.search(rf"через\s+(?:(\d+)|({qty}))?\s*({units})\w*", t)
+    # «1,5 часа» — с телефона пишут цифрами и с запятой (07.10.2026 не разобралось,
+    # и дело записалось вовсе без времени)
+    m = re.search(rf"через\s+(?:(\d+(?:[.,]\d+)?)|({qty}))?\s*({units})\w*", t)
     if not m:
         return None
-    n = float(m.group(1)) if m.group(1) else QTY.get(m.group(2) or "", 1)
+    n = float(m.group(1).replace(",", ".")) if m.group(1) else QTY.get(m.group(2) or "", 1)
     unit = next(kind for stem, kind in UNITS if m.group(3).startswith(stem))
     if unit == "months":
         return _add_months(now, int(n)) + timedelta(days=round((n % 1) * 30))
@@ -269,7 +280,7 @@ def add_task(text: str, when_text: str = "") -> str:
     clean = re.sub(r"\b(послезавтра|завтра|сегодня|вечером|утром|днем|днём|ночью)\b", "", clean, flags=re.I)
     qty = "|".join(sorted(QTY, key=len, reverse=True))
     units = "|".join(u for u, _ in UNITS)
-    clean = re.sub(rf"\bчерез\s+(?:полчаса|(?:\d+|{qty})?\s*(?:{units})\w*)",
+    clean = re.sub(rf"\bчерез\s+(?:полчаса|(?:\d+(?:[.,]\d+)?|{qty})?\s*(?:{units})\w*)",
                    "", clean, flags=re.I)
     clean = re.sub(r"\bв\s+(полдень|полночь)\b", "", clean, flags=re.I)
     clean = re.sub(r"\b(на|в)\s+следующ\w+\s+недел\w+", "", clean, flags=re.I)
@@ -288,7 +299,7 @@ def add_task(text: str, when_text: str = "") -> str:
         minutes = (when - datetime.now()).total_seconds() / 60 if when else 10
         return snooze(last["id"], max(1, minutes))
     tasks.append({
-        "id": int(datetime.now().timestamp()),
+        "id": _new_id(tasks),
         "text": clean,
         "when": when.isoformat(timespec="minutes") if when else None,
         "done": False,
@@ -300,13 +311,41 @@ def add_task(text: str, when_text: str = "") -> str:
     return f"Записал: {clean}."
 
 
+def _new_id(tasks: list) -> int:
+    """Номер дела. По секундам, но без повторов: два дела, записанные в одну
+    секунду, получали один номер, и кнопка «Сделано» закрыла бы не то."""
+    taken = {t.get("id") for t in tasks}
+    n = int(datetime.now().timestamp())
+    while n in taken:
+        n += 1
+    return n
+
+
+def add_command(command: str, when: datetime) -> str:
+    """Отложенная команда: «через полтора часа включи видео» — в срок выполнить,
+    а не напомнить. Живёт в списке дел (видна в закрепе и в «что в планах»);
+    исполняет её будильник Джарвиса."""
+    tasks = _load(TASKS, [])
+    tasks.append({
+        "id": _new_id(tasks),
+        "text": command,
+        "do": command,
+        "when": when.isoformat(timespec="seconds"),
+        "done": False,
+        "created": datetime.now().isoformat(timespec="seconds"),
+    })
+    _save(TASKS, tasks)
+    at = f"в {when:%H:%M}" if when.date() == date.today() else when_phrase(when)
+    return f"Хорошо, {at} выполню: {command}."
+
+
 def add_timer(minutes: float, label: str = "") -> str:
     """Кухонный таймер. Живёт в том же списке задач — отдельный механизм не нужен."""
     tasks = _load(TASKS, [])
     when = datetime.now() + timedelta(minutes=float(minutes))
     text = f"таймер{' — ' + label if label else ''}"
     tasks.append({
-        "id": int(datetime.now().timestamp()),
+        "id": _new_id(tasks),
         "text": text,
         "when": when.isoformat(timespec="seconds"),
         "done": False,
@@ -357,37 +396,45 @@ def active_timers() -> str:
     return "Осталось: " + ", ".join(parts) + "."
 
 
+def _lessons_on(day: date) -> list:
+    """Уроки дня для «что у меня сегодня»: хозяин — репетитор, и план дня без
+    уроков — не план. Пары (время, текст), как у дел."""
+    try:
+        from skills import lessons as LS
+        return [(it["at"], f"урок с {LS.decline(it['name'], 'тв')}"
+                           + (f" ({it['subject']})" if it.get("subject") else ""))
+                for it in LS._planned_for(day)]
+    except Exception:
+        return []
+
+
 def list_tasks(when: str = "today") -> str:
     # Таймеры живут в том же файле, но в планах на день им не место
     tasks = [t for t in _load(TASKS, []) if not t["done"] and not t.get("timer")]
-    if not tasks:
-        return "Задач нет, всё чисто."
     now = datetime.now()
-    if when == "today":
-        sel = [t for t in tasks if t["when"] and
-               datetime.fromisoformat(t["when"]).date() == now.date()]
-        label = "На сегодня"
-    elif when == "tomorrow":
-        tm = (now + timedelta(days=1)).date()
-        sel = [t for t in tasks if t["when"] and
-               datetime.fromisoformat(t["when"]).date() == tm]
-        label = "На завтра"
+    at = lambda t: datetime.fromisoformat(t["when"]) if t["when"] else None
+    if when in ("today", "tomorrow"):
+        day = now.date() if when == "today" else (now + timedelta(days=1)).date()
+        items = [(at(t), t["text"]) for t in tasks if t["when"] and at(t).date() == day]
+        items += _lessons_on(day)
+        label = "На сегодня" if when == "today" else "На завтра"
     elif when == "week":
         end = now + timedelta(days=7)
-        sel = [t for t in tasks if t["when"] and now <= datetime.fromisoformat(t["when"]) <= end]
+        items = [(at(t), t["text"]) for t in tasks if t["when"] and now <= at(t) <= end]
         label = "На неделю"
     else:
-        sel = tasks
+        items = [(at(t), t["text"]) for t in tasks]
         label = "Всего"
-    if not sel:
-        return f"{label} ничего не запланировано."
-    sel.sort(key=lambda t: t["when"] or "9999")
+    if not items:
+        if when in ("today", "tomorrow", "week"):
+            return f"{label} ничего не запланировано."
+        return "Задач нет, всё чисто."
+    items.sort(key=lambda x: x[0] or datetime.max)
     lines = []
-    for t in sel[:10]:
-        if not t["when"]:
-            lines.append(f"без времени — {t['text']}")
+    for dt, text in items[:10]:
+        if not dt:
+            lines.append(f"без времени — {text}")
             continue
-        dt = datetime.fromisoformat(t["when"])
         # день называем только когда он не очевиден из самого вопроса
         if when in ("today", "tomorrow") or dt.date() == now.date():
             stamp = dt.strftime("%H:%M")
@@ -395,8 +442,8 @@ def list_tasks(when: str = "today") -> str:
             stamp = f"завтра в {dt:%H:%M}"
         else:
             stamp = f"{WEEKDAYS[dt.weekday()]} в {dt:%H:%M}"
-        lines.append(f"{stamp} — {t['text']}")
-    return f"{label} {len(sel)}: " + "; ".join(lines) + "."
+        lines.append(f"{stamp} — {text}")
+    return f"{label} {len(items)}: " + "; ".join(lines) + "."
 
 
 def complete_task(query: str) -> str:

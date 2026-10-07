@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core import config
 
 OWNER = 111222333
-PHRASES = ["который час", "сколько будет двести плюс сорок", "открой блокнот"]
+PHRASES = ["который час", "сколько будет двести плюс сорок", "открой блокнот",
+           "какие ещё новости"]          # последнее — мимо правил, к мозгу
 
 
 def make_ogg(text: str) -> bytes:
@@ -56,8 +57,14 @@ def main():
     from core.ears import Ears
     from core.phone import Phone
 
+    from tests import sandbox
+    acted = sandbox.enable()               # «открой блокнот» разбирается, но не открывает
     j = J.Jarvis(voice_mode=False)
     j.voice.say = lambda text: None
+    # Мозг думает дольше двух секунд, как без сети со своей моделью. 07.10.2026
+    # в таком случае телефон получал «Не получилось ответить», не дождавшись ответа
+    import time as _time
+    j.brain.ask = lambda text, image_path=None: _time.sleep(3) or "Новостей нет, всё спокойно."
     print("поднимаю распознаватель...")
     j.ears = Ears(j.cfg, str(config.MODELS))
 
@@ -77,15 +84,17 @@ def main():
         heard = next((t[len("Услышал: "):] for t in texts if t.startswith("Услышал: ")), "")
         answer = next((t for t in texts if not t.startswith("Услышал: ")), "")
         voices = sum(1 for m, _, f in sent if m == "sendVoice" and f)
-        ok = bool(answer) and bool(heard)
+        ok = bool(answer) and bool(heard) and "Не получилось" not in answer
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} голосовое «{phrase}»")
         print(f"     разобрал: «{heard}» → ответ: «{answer[:70]}»")
         print(f"     голосовым ответил: {'да' if voices else 'нет'} (режим {phone.voice_replies})")
 
-    print("\nубираю за собой: закрываю блокнот, если открылся")
-    from skills import system as S
-    print("  " + S.close_app("блокнот"))
+    # Раньше тест открывал настоящий Блокнот, а в конце закрывал — вместе с
+    # блокнотом хозяина, если тот был открыт
+    ok = [name for name, _ in acted] == ["system.open_app"]
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} «открой блокнот» дошло до запуска программы (в песочнице): {acted}")
     print(f"\nошибок: {errors}")
     return errors == 0
 
