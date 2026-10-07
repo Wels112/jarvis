@@ -101,6 +101,7 @@ class Phone:
         self.push = cfg.get("push_reminders", True)
         self.pinned = cfg.get("pinned_digest", True)           # сводка заметок в закрепе
         self.confirm_tasks = cfg.get("confirm_tasks", True)    # «Записал: … — в 20:00» в чат
+        self.brief_at = cfg.get("morning_brief", "08:00")      # план на день; "" — не присылать
         self.token = config.env("TELEGRAM_BOT_TOKEN")
         self.session = requests.Session()
         self._offset = 0
@@ -350,9 +351,59 @@ class Phone:
             self.mark_tasks_seen()
         return len(new)
 
+    def morning_brief(self, now=None) -> bool:
+        """Утром — план на день отдельным сообщением.
+
+        Закреп правится молча: о правке Telegram не уведомляет. Хозяин же просил,
+        чтобы бот писал «вот это, в такое-то время» (07.10.2026). Поэтому раз в
+        день — не раньше brief_at и не позже полудня — план приходит обычным
+        сообщением, и только если на сегодня что-то есть.
+        """
+        if not (self.available and self.owner and self.brief_at):
+            return False
+        from datetime import datetime
+        now = now or datetime.now()
+        try:
+            hh, mm = (int(x) for x in str(self.brief_at).split(":"))
+        except ValueError:
+            return False
+        if (now.hour, now.minute) < (hh, mm) or now.hour >= 12:
+            return False
+        state = self._state()
+        today = now.date().isoformat()
+        if state.get("brief_day") == today:
+            return False
+        lines = self._today_plan(now)
+        state["brief_day"] = today
+        self._save_state(state)
+        return bool(lines) and self.send("Доброе утро! На сегодня:\n" + "\n".join(lines))
+
+    @staticmethod
+    def _today_plan(now) -> list:
+        """«• 15:00 — урок с Петей», «• 20:00 — ученик» — что ещё впереди сегодня."""
+        from datetime import datetime
+        from core import memory
+        items = []
+        for t in memory._load(memory.TASKS, []):
+            if t["done"] or t.get("timer") or not t.get("when"):
+                continue
+            at = datetime.fromisoformat(t["when"])
+            if at.date() == now.date() and at >= now:
+                items.append((at, t["text"]))
+        try:
+            from skills import lessons
+            for it in lessons._planned_for(now.date()):
+                if it["at"] >= now:
+                    subject = f" ({it['subject']})" if it.get("subject") else ""
+                    items.append((it["at"], f"урок с {lessons.decline(it['name'], 'тв')}{subject}"))
+        except Exception:
+            pass
+        items.sort(key=lambda x: x[0])
+        return [f"• {at:%H:%M} — {text}" for at, text in items]
+
     def _digest_loop(self):
         while not self._stop.is_set():
-            for step in (self.announce_new_tasks, self.sync_digest):
+            for step in (self.morning_brief, self.announce_new_tasks, self.sync_digest):
                 try:
                     step()
                 except Exception as e:

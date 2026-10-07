@@ -268,6 +268,23 @@ def main():
         pp.clear()
         step_no_dup = paired.announce_new_tasks() == 0 and not pp.texts()
 
+        # Утренний план: раз в день, с brief_at до полудня, только если что-то есть
+        from datetime import datetime, timedelta
+        day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        memory._save(memory.TASKS, [{"id": 1, "text": "ученик", "when": f"{day:%Y-%m-%d}T20:00",
+                                     "done": False, "created": ""}])
+        pp.clear()
+        early = paired.morning_brief(now=day.replace(hour=7, minute=30))
+        sent_morning = paired.morning_brief(now=day.replace(hour=8, minute=30))
+        morning = pp.texts()[-1] if pp.texts() else ""
+        twice = paired.morning_brief(now=day.replace(hour=9))
+        step_brief = (not early and sent_morning and twice is False and len(pp.texts()) == 1
+                      and morning.startswith("Доброе утро") and "• 20:00 — ученик" in morning)
+        memory._save(memory.TASKS, [])
+        next_day = day + timedelta(days=1)
+        step_quiet = paired.morning_brief(now=next_day.replace(hour=8, minute=5)) is False \
+            and len(pp.texts()) == 1                        # пустой день — ничего не шлёт
+
         j.process("какие у меня задачи", from_voice=False)  # голосом (не из телефона)
         talk = memory.recent_talk()
         step_talk = ("Telegram] хозяин: напомни завтра в 10 купить хлеб" in talk
@@ -285,6 +302,8 @@ def main():
                      ("модель знает, что телефон подключён", step_aware),
                      ("новое дело — «Записал … Напомню здесь», один раз", step_announce),
                      ("записанное с телефона не дублируется", step_no_dup),
+                     ("утренний план: в 8:30 один раз, в 7:30 рано", step_brief),
+                     ("пустой день — утром тишина", step_quiet),
                      ("разговор общий: голос и Telegram с метками, своей модели — без него", step_talk)):
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} вместе: {name}")
