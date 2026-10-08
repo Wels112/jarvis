@@ -233,6 +233,89 @@ def open_safely(path: str) -> str:
     return f"Открываю {name}."
 
 
+_folder_cache = {"key": None, "data": {}}
+
+
+def _folders() -> dict:
+    """{папка: (имя строчными, самая свежая дата файла внутри)} — собирается раз на индекс."""
+    with _lock:
+        pool = list(_files)
+    key = (len(pool), pool[0][1] if pool else "")
+    if _folder_cache["key"] == key:
+        return _folder_cache["data"]
+    data = {}
+    for _name, path, mtime in pool:
+        d = os.path.dirname(path)
+        while len(d) > 3:
+            old = data.get(d)
+            if old and old[1] >= mtime:
+                break                        # выше уже учтено с датой не хуже
+            data[d] = (os.path.basename(d).lower().replace("ё", "е"), max(mtime, old[1] if old else 0))
+            d = os.path.dirname(d)
+    _folder_cache.update(key=key, data=data)
+    return data
+
+
+def find_folders(query: str, limit: int = 5):
+    """Папки по имени — из путей проиндексированных файлов: «папку jarvis», «проект tutorlab».
+
+    Отдельного списка папок нет, но каждая папка с файлами встречается в их
+    путях. Лучше — имя совпало целиком, путь короче, файлы в ней свежее.
+    """
+    _load()
+    stems, _ = _stems(query)
+    if not stems:
+        return []
+    latin = [s.translate(TRANSLIT).replace("dzh", "j") for s in stems]
+    want = " ".join(stems)
+    best = {d: m for d, (base, m) in _folders().items()
+            if all(s in base or (l and l in base) for s, l in zip(stems, latin))}
+    ranked = sorted(best.items(), key=lambda kv: (
+        os.path.basename(kv[0]).lower() in (want, " ".join(latin)),     # имя целиком
+        -kv[0].count(os.sep), kv[1]), reverse=True)
+    return [d for d, _ in ranked[:limit]]
+
+
+def open_folder(query: str) -> str:
+    """«Открой папку jarvis» — в Проводнике."""
+    hits = find_folders(query)
+    if not hits:
+        return f"Папку «{query}» не нашёл."
+    import subprocess
+    subprocess.Popen(["explorer.exe", hits[0]])
+    more = f" Есть ещё похожие: {', '.join(hits[1:3])}." if len(hits) > 1 else ""
+    return f"Открываю папку {hits[0]}.{more}"
+
+
+def open_in_code(query: str) -> str:
+    """«Открой проект jarvis в VS Code» — папкой, как проект."""
+    import shutil
+    import subprocess
+    hits = find_folders(query)
+    if not hits:
+        return f"Папку проекта «{query}» не нашёл."
+    exe = shutil.which("code") or next((str(p) for p in (
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Microsoft VS Code" / "Code.exe",
+        Path(os.environ.get("PROGRAMFILES", "")) / "Microsoft VS Code" / "Code.exe") if p.exists()), None)
+    if not exe:
+        return "VS Code не нашёл на компьютере."
+    subprocess.Popen([exe, hits[0]], shell=exe.lower().endswith((".cmd", ".bat")))
+    return f"Открываю {hits[0]} в VS Code."
+
+
+def open_document(query: str) -> str:
+    """«Открой документ резюме» — найти и сразу открыть лучший; остальные — по номеру."""
+    global _last, last_at
+    hits = find(query)
+    if not hits:
+        return f"Не нашёл файлов по запросу «{query}»."
+    _last, last_at = hits, time.time()
+    said = open_safely(hits[0][1])
+    if len(hits) > 1:
+        said += f" Нашёл ещё {len(hits) - 1} — скажи «открой второй», если не тот."
+    return said
+
+
 def latest_download() -> str:
     """«Открой последний скачанный файл» — самый свежий файл в «Загрузках».
 

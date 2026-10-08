@@ -424,7 +424,9 @@
           Открой <a href="https://colab.research.google.com/github/Wels112/jarvis/blob/main/train/jarvis_finetune.ipynb">ноутбук в Colab</a>,
           «Среда выполнения» → «Сменить среду выполнения» → T4 GPU, потом «Выполнить всё».
           Час-полтора, вкладку не закрывать. В «Загрузки» придёт
-          <span class="inline-code">jarvis-lora.gguf</span> — его проверим и подключим.
+          <span class="inline-code">jarvis-lora.gguf</span>. Потом закрой Джарвиса и запусти
+          <span class="inline-code">.venv\Scripts\python.exe train\install_lora.py</span> — сам найдёт файл,
+          сравнит с исходной моделью и подключит, только если стало лучше.
         </p>
       </div>
     </div>
@@ -467,6 +469,14 @@
         <div class="cmd">
           <span class="say">открой последний скачанный файл</span><span class="tag local">офлайн</span>
           <span class="does">Самый свежий файл из «Загрузок»; установщик не запускает, а показывает в папке</span>
+        </div>
+        <div class="cmd">
+          <span class="say">открой папку jarvis · открой проект jarvis в vs code</span><span class="tag local">офлайн</span>
+          <span class="does">Папки и документы по имени на всех дисках; «открой документ резюме» — сразу лучший, остальные по номеру</span>
+        </div>
+        <div class="cmd">
+          <span class="say">можешь открыть ютуб · а запусти-ка стим</span><span class="tag local">офлайн</span>
+          <span class="does">Разговорные формы и «пожалуйста» понимаются так же, как прямые команды</span>
         </div>
         <div class="cmd">
           <span class="say">закрой хром</span><span class="tag local">офлайн</span>

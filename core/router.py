@@ -705,6 +705,22 @@ def handle(text: str, cfg: dict) -> Reply:
     if m:
         return Reply(say=TG.open_chat(m.group(1).strip()))
 
+    # --- папки, проекты и документы по имени (skills/files.py) ---
+    # Раньше «открой папку jarvis» и «открой документ резюме» искали программу с таким названием
+    m = re.search(r"^(?:открой|запусти)\s+(?:проект|папку)\s+(.+?)\s+в\s+(?:vs\s*code|вс\s*код\w*|vscode|"
+                  r"визуал\s+студио(?:\s+код)?|код\w*)$", t)
+    if m:
+        from skills import files as F
+        return Reply(say=F.open_in_code(m.group(1)))
+    m = re.search(r"^(?:открой|покажи|зайди в)\s+(?:папку|проект)\s+(.+)$", t)
+    if m and not (f"папку {m.group(1)}" in S.PLACES or m.group(1) in S.PLACES):
+        from skills import files as F
+        return Reply(say=F.open_folder(m.group(1)))
+    m = re.search(r"^(?:открой|покажи)\s+((?:файл|документ|презентацию|таблицу|pdf|пдф)\s+.+)$", t)
+    if m:
+        from skills import files as F
+        return Reply(say=F.open_document(re.sub(r"^файл\s+", "", m.group(1))))
+
     # --- программы и сайты ---
     m = re.search(r"^(?:открой|запусти|включи|врубай|давай|зайди\s+(?:в|на)|перейди\s+(?:в|на))\s+(.+)$", t)
     if m:
@@ -783,7 +799,9 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.search_web(q))
 
     # --- система ---
-    if re.search(r"(как дела с (компьютером|системой)|статус системы|загрузка|нагрузка|сколько (памяти|места))", t):
+    if re.search(r"(как дела с (компьютером|системой)|статус системы|загрузка|нагрузка|"
+                 r"сколько (свободной )?(памяти|места|оперативк\w*|озу)|оперативк\w* свободн|"
+                 r"свободн\w* (оперативк|памят))", t):
         return Reply(say=S.system_info())
     if re.search(r"(что жрет|что ест|тяжелые процессы|какие процессы)", t):
         return Reply(say=S.top_processes())

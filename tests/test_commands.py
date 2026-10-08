@@ -133,6 +133,28 @@ def main():
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} «{phrase}» → {'МОДЕЛИ' if r.to_llm else r.say[:60]}")
 
+    # Папки, проекты и документы по имени — не программа «папку jarvis»
+    from skills import files as F
+    F.find_folders = lambda q, limit=5: [r"D:\jarvis"] if "jarvis" in q or "джарвис" in q else []
+    F.find = lambda q, limit=5: [("резюме.pdf", r"C:\docs\резюме.pdf", 0.0)] if "резюме" in q else []
+    opened = []
+    real_popen = F.__dict__.get("subprocess")
+    import subprocess as SP
+    popen = SP.Popen
+    SP.Popen = lambda args, *a, **k: opened.append(args)
+    try:
+        for phrase, want in (("открой папку jarvis", "Открываю папку D:\\jarvis."),
+                             ("открой проект джарвис в vs code", "Открываю D:\\jarvis в VS Code."),
+                             ("открой документ резюме", "[песочница] files.open_safely"),
+                             ("открой папку несуществующую", "Папку «несуществующую» не нашёл.")):
+            acted.clear()
+            r = router.handle(router.normalize(phrase), config.CFG)
+            ok = r.say.startswith(want) and not [a for a in acted if a[0] == "system.open_app"]
+            errors += not ok
+            print(f"{'ok ' if ok else 'НЕТ'} «{phrase}» → {r.say[:70]}")
+    finally:
+        SP.Popen = popen
+
     # «Сделай скриншот и пришли на телефон» — снимок уходит через бота
     import core.phone as phone_module
     shot = tmp / "jarvis_test.png"
