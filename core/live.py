@@ -71,6 +71,9 @@ PERSONA = """Ты — Джарвис, голосовой помощник. Вы 
 - Время и дата, погода, курсы валют, задачи и напоминания, уроки, ученики, заработок,
   место на диске, открытые окна, громкость — всегда вызывай нужный инструмент.
 - Просят что-то сделать на компьютере — делай инструментом, потом скажи итог в двух-трёх словах.
+  Обычные бытовые команды (открыть, включить, несколько дел одной фразой, «через час сделай …»)
+  быстрее и надёжнее всего через jarvis_command — той же фразой, что сказал хозяин.
+- Новости — только инструментом news. Поиск в браузере (web_search) ты не видишь — его не пересказывай.
 
 Опасные действия — удаление, отправка сообщений, выключение компьютера, очистка диска:
 - Не спрашивай разрешения заранее. Сразу вызывай сам инструмент действия.
@@ -97,7 +100,44 @@ LIVE_TOOLS = [
                      "Вызывай только после явного ответа хозяина вслух."),
      "parameters": {"type": "object", "properties": {
          "confirmed": {"type": "boolean", "description": "true — хозяин сказал да, false — нет"}}}},
+    # Только живому разговору: он идёт мимо правил роутера, и умения, которые
+    # живут только в правилах, были ему недоступны (проверка 08.10.2026).
+    # В учебник своей модели эти два не входят — её набор инструментов не меняется
+    {"name": "jarvis_command",
+     "description": ("Выполнить обычную команду Джарвиса одной фразой — как сказал бы хозяин. Быстро и "
+                     "надёжно для: мест Windows («открой загрузки», «открой настройки»), игр («запусти "
+                     "доту»), сайтов («открой госуслуги»), нескольких команд сразу («включи музыку на "
+                     "ютубе и сделай погромче»), «открой последний скачанный файл», «погода завтра», "
+                     "курса криптовалют («сколько стоит биткоин»), «что у меня в планах», отложенной "
+                     "команды («через полтора часа включи видео …» — выполнится в срок сама), Telegram на "
+                     "компьютере («открой чат с Сашей»). Если ответ — что правилами это не делается, "
+                     "возьми другие инструменты."),
+     "parameters": {"type": "object", "properties": {
+         "text": {"type": "string", "description": "Команда целиком, по-русски"}}, "required": ["text"]}},
+    {"name": "news",
+     "description": ("Свежие заголовки новостей (РИА, ТАСС, Интерфакс). topic — если спросили про "
+                     "что-то конкретное. Пересказывай только то, что вернулось, ничего не добавляй."),
+     "parameters": {"type": "object", "properties": {
+         "topic": {"type": "string", "description": "Тема, например «биткоин»; пусто — главное"}}}},
 ]
+
+
+def run_jarvis_command(brain, text: str) -> str:
+    """Фраза через правила роутера — то, что сказал бы хозяин вне живого разговора.
+
+    Опасное не выполняется: запрос подтверждения кладётся туда же, где его ждёт
+    confirm_pending, как у обычных инструментов.
+    """
+    from core import router
+    r = router.handle(router.normalize(text), config.CFG)
+    if r.to_llm:
+        return ("Правилами это не делается — выполни сам другими инструментами"
+                + (f". Уже сделано: {r.say}" if r.say else "") + ".")
+    if r.pending:
+        brain.pending_confirm = (r.pending_desc, r.pending)
+        return (f"ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ: {r.pending_desc}. Хозяину сказано: «{r.say}». "
+                "Спроси «делать?» и жди ответа.")
+    return r.say or "Сделано."
 
 
 def _schema(types, p: dict):
@@ -710,7 +750,13 @@ class LiveConversation:
         if name == "confirm_pending":
             return await self._confirm(bool(args.get("confirmed", False)))
         before = self.brain.pending_confirm
-        result = await asyncio.to_thread(self.brain._run_tool, name, args)
+        if name == "jarvis_command":
+            result = await asyncio.to_thread(run_jarvis_command, self.brain, str(args.get("text", "")))
+        elif name == "news":
+            from skills import news
+            result = await asyncio.to_thread(news.headlines, 5, str(args.get("topic", "") or ""))
+        else:
+            result = await asyncio.to_thread(self.brain._run_tool, name, args)
         if self.brain.pending_confirm is not None and self.brain.pending_confirm is not before:
             self.pending_since = time.monotonic()    # с этого момента ждём «да» голосом
             self.heard_since_pending = ""

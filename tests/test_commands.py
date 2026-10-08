@@ -105,6 +105,24 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} несколько команд: правилам — своё, модели — остаток")
 
+    # Живой разговор идёт мимо правил — те же умения через инструмент jarvis_command
+    from core.live import run_jarvis_command, LIVE_TOOLS
+
+    class FakeBrain:
+        pending_confirm = None
+    b = FakeBrain()
+    acted.clear()
+    said = run_jarvis_command(b, "Открой загрузки")
+    ok1 = acted and acted[0][0] == "system.open_app" and "[песочница]" in said
+    said2 = run_jarvis_command(b, "выключи компьютер через час")
+    ok2 = said2.startswith("ТРЕБУЕТСЯ ПОДТВЕРЖДЕНИЕ") and b.pending_confirm and "через 60 минут" in said2
+    said3 = run_jarvis_command(FakeBrain(), "кто такой илон маск")
+    ok3 = said3.startswith("Правилами это не делается")
+    ok = ok1 and ok2 and ok3 and {"jarvis_command", "news"} <= {t["name"] for t in LIVE_TOOLS}
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} живой разговор: команда правилами, опасное — через «да», "
+          f"непосильное — обратно модели")
+
     sandbox.disable()
     print(f"\nошибок: {errors}")
     return errors == 0
