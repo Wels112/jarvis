@@ -56,3 +56,4 @@ train/data/honesty.jsonl
 data/files_index.json
 data/disk_usage*.json
 data/cleanup_blocked.json
+data/version.json

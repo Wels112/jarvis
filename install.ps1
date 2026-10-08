@@ -92,6 +92,15 @@ Expand-Archive $zip $tmp -Force
 $inner = Get-ChildItem $tmp -Directory | Select-Object -First 1
 Copy-Item "$($inner.FullName)\*" $root -Recurse -Force
 Remove-Item $zip, $tmp -Recurse -Force -ErrorAction SilentlyContinue
+# Какая версия встала — по ней «Джарвис, обновись» поймёт, есть ли что новое
+try {
+    $c = Invoke-RestMethod "https://api.github.com/repos/Wels112/jarvis/commits/$Branch"
+    $d = $c.commit.committer.date
+    $d = if ($d -is [datetime]) { $d.ToString('yyyy-MM-dd') } else { ([string]$d).Substring(0, 10) }
+    New-Item -ItemType Directory -Force "$root\data" | Out-Null
+    Save-Utf8 "$root\data\version.json" (@{ sha = $c.sha; date = $d;
+        message = ($c.commit.message -split "`n")[0] } | ConvertTo-Json -Compress)
+} catch { }
 Готово 'код на месте'
 
 # --- 4. Окружение ----------------------------------------------------------

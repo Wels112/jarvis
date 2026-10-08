@@ -674,6 +674,16 @@ def handle(text: str, cfg: dict) -> Reply:
         n = len(S.build_app_index(force=True))
         return Reply(say=f"Список обновлён, вижу {n} программ.")
 
+    # --- обновление самого Джарвиса с GitHub (skills/update.py) ---
+    if re.fullmatch(r"(?:проверь|есть ли|есть|какие)\s+(?:ли\s+)?обновлени\w*(?:\s+джарвиса)?", t):
+        from skills import update as U
+        return Reply(say=U.check())
+    if re.fullmatch(r"обновись|обнови себя|обнови джарвиса|обновить джарвиса|установи обновлени\w*", t):
+        from skills import update as U
+        return Reply(say="Обновить Джарвиса до последней версии с GitHub? Ключи, память и настройки "
+                         "останутся. Скажи «да».",
+                     pending=lambda: U.apply(restart_after=6), pending_desc="обновление Джарвиса")
+
     # --- где искать: Яндекс или Google ---
     # Насовсем: «ищи через яндекс», «переключи поиск на гугл», «надо яндекс
     # активировать» (так хозяин и сказал 07.10.2026, а Джарвис в ответ лишь
