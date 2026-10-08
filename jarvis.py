@@ -194,6 +194,11 @@ class Jarvis:
         except Exception as e:
             print(f"[brain] не поднялся: {e}")
             self.brain = None
+        # «Подключи обученную модель»: проверка в фоне выгружает свою модель и
+        # потом рассказывает, чем кончилось (skills/training.py)
+        from skills import training
+        training.NOTIFY = self.notify
+        training.LOCAL = getattr(self.brain, "local", None)
         try:
             # Список файлов на дисках — в фоне: обойти D: с холодного диска
             # занимает до двадцати секунд, а искать по готовому — мгновенно

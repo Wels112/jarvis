@@ -389,6 +389,7 @@ D:\jarvis\.venv\Scripts\python.exe D:\jarvis\tests\run_all.py
 | Обучение: текст в Colab = текст у хозяина (нужен `transformers`) | `train/check_template.py` |
 | Обучение: надстройка упаковывается и накладывается llama.cpp | `train/check_lora.py` |
 | Обучение: подключить скачанную надстройку — только если она лучше исходной | `train/install_lora.py` |
+| «Подключи обученную модель» — в фоне, своя модель выгружается, итог вслух и в Telegram | `test_training.py` |
 | Учебник совпадает с инструментами в работе (`--write` — выгрузить) | `train/sync_prompt.py` |
 | Поиск: Яндекс по умолчанию, «ищи через гугл», повтор запроса | `test_search.py` |
 | Честность: «сделал» вопреки отказу инструмента — просит поправиться | `test_honesty_guard.py` |
