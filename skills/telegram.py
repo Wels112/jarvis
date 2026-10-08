@@ -100,7 +100,9 @@ async def _unread(limit: int):
 
 def unread(limit: int = 6) -> str:
     if not ready():
-        return NOT_CONNECTED
+        return ("Список непрочитанного виден только с подключённым личным Telegram (setup.bat, "
+                "пара минут). Без него могу открыть любой чат на компьютере и прочитать последние "
+                "сообщения — скажи чей.")
     try:
         return _run(_unread(limit))
     except Exception as e:
@@ -130,7 +132,9 @@ async def _read_chat(name: str, n: int):
 
 def read_chat(name: str, n: int = 5) -> str:
     if not ready():
-        return NOT_CONNECTED
+        # Без входа — откроем чат в приложении на компьютере и прочитаем с экрана
+        from skills import tg_desktop
+        return tg_desktop.read_chat(name, n)
     try:
         return _run(_read_chat(name, n))
     except Exception as e:
@@ -171,7 +175,8 @@ def open_chat(name: str) -> str:
     """
     import os
     if not ready():
-        return NOT_CONNECTED
+        from skills import tg_desktop
+        return tg_desktop.open_chat(name)
     try:
         link, title = _run(_chat_link(name))
     except Exception as e:

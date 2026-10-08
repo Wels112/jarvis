@@ -114,9 +114,9 @@ def main():
 
         # 5. Телефон ждёт мозг, сколько бы тот ни думал
         j.notify = J.Jarvis.notify.__get__(j)
-        j.brain.ask = lambda text, image_path=None: time.sleep(3) or "Новостей нет."
-        answer = j.answer_text("какие ещё новости")
-        ok = answer == "Новостей нет."
+        j.brain.ask = lambda text, image_path=None: time.sleep(3) or "Илон Маск — предприниматель."
+        answer = j.answer_text("кто такой илон маск")
+        ok = answer == "Илон Маск — предприниматель."
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} телефон дождался мозга (3 с): «{answer}»")
 

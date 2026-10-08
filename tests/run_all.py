@@ -17,7 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SUITES = [
-    "test_reminders", "test_late_reminders", "test_plans", "test_announce", "test_phone",
+    "test_commands", "test_reminders", "test_late_reminders", "test_plans", "test_announce", "test_phone",
     "test_phone_voice", "test_safety",
     "test_one_pending", "test_honesty_guard", "test_live_fallback", "test_hands_aware",
     "test_hybrid_brain", "test_files", "test_search",

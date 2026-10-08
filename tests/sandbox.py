@@ -26,7 +26,7 @@ ACTS = {
     "skills.lessons": ["add_student", "set_schedule", "start_lesson", "finish_lesson",
                        "cancel_lesson", "add_note", "open_board", "open_tutorlab"],
     "skills.weather": ["remember_city"],
-    "skills.files": ["open_found"],
+    "skills.files": ["open_found", "open_safely", "latest_download"],
     "skills.ui": ["click"],
 }
 

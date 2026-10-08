@@ -151,7 +151,38 @@ def convert_currency(amount: float, frm: str, to: str = "RUB") -> str:
         return f"Курс не получил: {e}"
 
 
+# Криптовалюты — у сервиса курсов их нет, «сколько стоит биткоин» кончалось
+# «сервис курсов недоступен» (проверка 08.10.2026). CoinGecko отдаёт цену без ключа
+CRYPTO = {"биткоин": ("bitcoin", "Биткоин"), "биткойн": ("bitcoin", "Биткоин"),
+          "bitcoin": ("bitcoin", "Биткоин"), "btc": ("bitcoin", "Биткоин"),
+          "эфир": ("ethereum", "Эфир"), "ethereum": ("ethereum", "Эфир"), "eth": ("ethereum", "Эфир"),
+          "тон": ("the-open-network", "TON"), "toncoin": ("the-open-network", "TON"),
+          "ton": ("the-open-network", "TON"), "солан": ("solana", "Солана"),
+          "solana": ("solana", "Солана"), "usdt": ("tether", "USDT"), "тезер": ("tether", "USDT"),
+          "догикоин": ("dogecoin", "Догикоин"), "dogecoin": ("dogecoin", "Догикоин")}
+
+
+def crypto_price(word: str) -> str:
+    """Цена криптовалюты в долларах и рублях; '' — это не криптовалюта."""
+    w = word.lower().strip()
+    key = next((k for k in CRYPTO if w.startswith(k)), None)
+    if not key or (key == "тон" and w not in ("тон", "тона", "тоне", "тону")):  # «тонна» — не монета
+        return ""
+    coin, title = CRYPTO[key]
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price",
+                         params={"ids": coin, "vs_currencies": "usd,rub"}, timeout=15)
+        r.raise_for_status()
+        price = r.json()[coin]
+        return f"{title} стоит {money(price['usd'], 'USD')} — это {money(price['rub'], 'RUB')}."
+    except Exception as e:
+        return f"Цену {title} не получил: {e}"
+
+
 def exchange_rate(cur: str = "USD") -> str:
+    crypto = crypto_price(cur)
+    if crypto:
+        return crypto
     cur = _currency_code(cur)
     try:
         value = _rate(cur, "RUB")

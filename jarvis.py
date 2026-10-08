@@ -393,11 +393,13 @@ class Jarvis:
             return True
 
         if reply.to_llm:
+            if reply.say:                 # первые команды из нескольких уже выполнены правилами
+                self.say(reply.say)
             if not self.brain or not self.brain.ready:
                 self.say("Это уже за пределами простых команд, а умный режим не подключён. "
                          "Нужен ключ Gemini.")
                 return True
-            answer = self._think(text)
+            answer = self._think(reply.meta.get("llm_text", text))
             if self.brain.pending_confirm:
                 self.pending = self.brain.pending_confirm
                 self.pending_from = "phone" if self._quiet else "voice"
@@ -561,7 +563,7 @@ class Jarvis:
                 if reply.pending:
                     result = "это нужно подтвердить — скажи ещё раз, если всё ещё нужно"
                 elif reply.to_llm and self.brain and self.brain.ready:
-                    result = self._think(cmd)
+                    result = " ".join(filter(None, [reply.say, self._think(reply.meta.get("llm_text", cmd))]))
                     if self.brain.pending_confirm:
                         self.brain.pending_confirm = None
                         result = "это нужно подтвердить — скажи ещё раз, если всё ещё нужно"

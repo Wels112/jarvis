@@ -131,7 +131,8 @@ def _degrees(t: float) -> str:
     return "градусов"
 
 
-def weather(city: str = "") -> str:
+def weather(city: str = "", day: int = 0) -> str:
+    """Погода сейчас (day=0) или прогноз: day=1 — завтра, 2 — послезавтра."""
     city = (city or _saved_city()).strip()
     if not city:
         return "Не знаю твой город. Скажи «погода в Москве», и я запомню."
@@ -144,20 +145,25 @@ def weather(city: str = "") -> str:
             "latitude": lat, "longitude": lon,
             "current": "temperature_2m,apparent_temperature,weather_code,wind_speed_10m",
             "daily": "temperature_2m_max,temperature_2m_min,weather_code",
-            "timezone": "auto", "forecast_days": 1,
+            "timezone": "auto", "forecast_days": day + 1,
         }, timeout=15)
         r.raise_for_status()
         d = r.json()
         cur = d["current"]
-        day = d["daily"]
+        daily = d["daily"]
 
         t = cur["temperature_2m"]
         feels = cur["apparent_temperature"]
         desc = WMO.get(cur["weather_code"], "непонятно что")
         wind = round(cur["wind_speed_10m"])
-        tmax, tmin = day["temperature_2m_max"][0], day["temperature_2m_min"][0]
+        tmax, tmin = daily["temperature_2m_max"][day], daily["temperature_2m_min"][day]
 
         remember_city(name)          # каноническое «Москва», а не услышанное «москве»
+        if day:
+            when = "Завтра" if day == 1 else "Послезавтра"
+            what = WMO.get(daily["weather_code"][day], "непонятно что")
+            return (f"{when} в городе {name} от {_temp_word(tmin)} до {_temp_word(tmax)} "
+                    f"{_degrees(tmax)}, {what}.")
         parts = [f"В городе {name} сейчас {_temp_word(t)} {_degrees(t)}, {desc}"]
         if abs(feels - t) >= 3:
             parts.append(f"ощущается как {_temp_word(feels)}")

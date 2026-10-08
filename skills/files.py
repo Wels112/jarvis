@@ -214,5 +214,39 @@ def open_found(n: int = 1) -> str:
             f"В последнем поиске {len(_last)} файлов, назови номер от 1 до {len(_last)}."
     if not os.path.exists(path):
         return f"Файла {os.path.basename(path)} уже нет на месте."
+    return open_safely(path)
+
+
+# Запуск этого — уже не «открыть файл», а выполнить программу. Скачанный
+# установщик голосом не запускаем: показываем в папке, дальше решает хозяин
+RUNNABLE = {".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf",
+            ".scr", ".com", ".hta", ".reg"}
+
+
+def open_safely(path: str) -> str:
+    name = os.path.basename(path)
+    if os.path.splitext(path)[1].lower() in RUNNABLE:
+        import subprocess
+        subprocess.Popen(["explorer.exe", "/select,", path])
+        return f"{name} — программа или установщик: сам не запускаю, показал его в папке."
     os.startfile(path)
-    return f"Открываю {os.path.basename(path)}."
+    return f"Открываю {name}."
+
+
+def latest_download() -> str:
+    """«Открой последний скачанный файл» — самый свежий файл в «Загрузках».
+
+    Становится «последним найденным»: дальше «пришли его на телефон» знает, о чём речь.
+    """
+    global _last, last_at
+    folder = Path.home() / "Downloads"
+    try:
+        files = [p for p in folder.iterdir() if p.is_file() and not p.name.startswith(("~$", "."))
+                 and p.suffix.lower() not in (".crdownload", ".part", ".tmp", ".partial", ".ini")]
+    except OSError:
+        files = []
+    if not files:
+        return "В «Загрузках» пусто."
+    newest = max(files, key=lambda p: p.stat().st_mtime)
+    _last, last_at = [(newest.name, str(newest), newest.stat().st_mtime)], time.time()
+    return open_safely(str(newest))

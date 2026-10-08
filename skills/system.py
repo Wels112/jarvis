@@ -55,6 +55,51 @@ ALIASES = {
     "calendar": "календарь", "mail": "почта", "clock": "часы", "alarms": "часы",
     "snipping tool": "ножницы", "control panel": "панель управления",
     "command prompt": "командная строка", "terminal": "терминал",
+    "яндекс браузер": "yandex", "яндекс": "yandex", "yandex browser": "yandex",
+    # Игры зовут прозвищами и по-русски, а в Steam они по-английски
+    "дота": "dota 2", "доту": "dota 2", "дотка": "dota 2", "дотку": "dota 2", "дота 2": "dota 2",
+    "кс": "counter-strike 2", "кс2": "counter-strike 2", "контра": "counter-strike 2",
+    "контру": "counter-strike 2", "каэс": "counter-strike 2", "пабг": "pubg", "пубг": "pubg",
+    "гта": "grand theft auto v", "гта 5": "grand theft auto v", "фар край": "far cry",
+    "фаркрай": "far cry", "майнкрафт": "minecraft", "майн": "minecraft", "раст": "rust",
+    "апекс": "apex legends", "варфейс": "warface", "танки": "world of tanks",
+}
+
+# Одна и та же работа разными программами: «открой ворд», а Word не стоит —
+# открываем то, что есть (WPS, LibreOffice), а не WordPad по похожему слову
+EQUIVALENTS = {
+    "word": ("microsoft word", "word", "wps writer", "libreoffice writer"),
+    "excel": ("microsoft excel", "excel", "wps spreadsheets", "libreoffice calc"),
+    "powerpoint": ("microsoft powerpoint", "powerpoint", "wps presentation", "libreoffice impress"),
+    "ворд": ("microsoft word", "word", "wps writer", "libreoffice writer"),
+    "эксель": ("microsoft excel", "excel", "wps spreadsheets", "libreoffice calc"),
+    "поверпоинт": ("microsoft powerpoint", "powerpoint", "wps presentation", "libreoffice impress"),
+    "презентацию": ("microsoft powerpoint", "powerpoint", "wps presentation", "libreoffice impress"),
+    "таблицы": ("microsoft excel", "excel", "wps spreadsheets", "libreoffice calc"),
+}
+
+# Места Windows, а не программы: «открой настройки» — это Параметры, а не
+# «Средства настройки WPS Office», которые находились по слову (проверка 08.10.2026)
+PLACES = {
+    "настройки": "ms-settings:", "параметры": "ms-settings:", "параметры windows": "ms-settings:",
+    "настройки windows": "ms-settings:", "settings": "ms-settings:",
+    "настройки звука": "ms-settings:sound", "параметры звука": "ms-settings:sound",
+    "блютуз": "ms-settings:bluetooth", "bluetooth": "ms-settings:bluetooth",
+    "вайфай": "ms-settings:network-wifi", "wi-fi": "ms-settings:network-wifi",
+    "wifi": "ms-settings:network-wifi", "настройки сети": "ms-settings:network",
+    "настройки экрана": "ms-settings:display", "дисплей": "ms-settings:display",
+    "обновления": "ms-settings:windowsupdate", "центр обновления": "ms-settings:windowsupdate",
+    "обновление windows": "ms-settings:windowsupdate",
+    "установленные программы": "ms-settings:appsfeatures", "приложения": "ms-settings:appsfeatures",
+    "принтеры": "ms-settings:printers", "питание": "ms-settings:powersleep",
+    "обои": "ms-settings:personalization-background", "фон": "ms-settings:personalization-background",
+    "загрузки": "shell:Downloads", "закачки": "shell:Downloads", "папку загрузки": "shell:Downloads",
+    "документы": "shell:Personal", "мои документы": "shell:Personal", "папку документы": "shell:Personal",
+    "рабочий стол": "shell:Desktop", "изображения": "shell:My Pictures", "картинки": "shell:My Pictures",
+    "папку видео": "shell:My Video", "папку музыка": "shell:My Music",
+    "корзину": "shell:RecycleBinFolder", "корзина": "shell:RecycleBinFolder",
+    "этот компьютер": "shell:MyComputerFolder", "мой компьютер": "shell:MyComputerFolder",
+    "диск c": "C:\\", "диск с": "C:\\", "диск d": "D:\\", "диск д": "D:\\",
 }
 
 # У некоторых программ процесс называется не так, как само приложение
@@ -74,11 +119,34 @@ NOT_NAMES = {"открой", "открыть", "откройте", "запуст
 
 SITES = {
     "ютуб": "https://www.youtube.com", "youtube": "https://www.youtube.com",
-    "гугл": "https://www.google.com", "почта": "https://mail.google.com",
-    "гмейл": "https://mail.google.com", "переводчик": "https://translate.google.com",
-    "карты": "https://maps.google.com", "гитхаб": "https://github.com",
-    "вк": "https://vk.com", "твич": "https://twitch.tv",
-    "чат гпт": "https://chat.openai.com",
+    "гугл": "https://www.google.com", "google": "https://www.google.com",
+    "почта": "https://mail.google.com", "гмейл": "https://mail.google.com",
+    "gmail": "https://mail.google.com", "джимейл": "https://mail.google.com",
+    "переводчик": "https://translate.yandex.ru", "карты": "https://yandex.ru/maps",
+    "гитхаб": "https://github.com", "github": "https://github.com",
+    "вк": "https://vk.com", "вконтакте": "https://vk.com", "vk": "https://vk.com",
+    "твич": "https://twitch.tv", "twitch": "https://twitch.tv",
+    "чат гпт": "https://chatgpt.com", "chatgpt": "https://chatgpt.com", "чатгпт": "https://chatgpt.com",
+    "госуслуги": "https://www.gosuslugi.ru", "кинопоиск": "https://www.kinopoisk.ru",
+    "рутуб": "https://rutube.ru", "rutube": "https://rutube.ru", "дзен": "https://dzen.ru",
+    "озон": "https://www.ozon.ru", "ozon": "https://www.ozon.ru",
+    "вайлдберриз": "https://www.wildberries.ru", "wildberries": "https://www.wildberries.ru",
+    "вб": "https://www.wildberries.ru", "авито": "https://www.avito.ru", "avito": "https://www.avito.ru",
+    "википедию": "https://ru.wikipedia.org", "википедия": "https://ru.wikipedia.org",
+    "спотифай": "https://open.spotify.com", "spotify": "https://open.spotify.com",
+    "яндекс почту": "https://mail.yandex.ru", "мейл": "https://mail.ru", "мэйл": "https://mail.ru",
+    "хабр": "https://habr.com", "hh": "https://hh.ru", "хэдхантер": "https://hh.ru",
+    "notion": "https://www.notion.so", "ноушн": "https://www.notion.so",
+    "фигму": "https://www.figma.com", "figma": "https://www.figma.com", "канву": "https://www.canva.com",
+    "canva": "https://www.canva.com", "сбер": "https://online.sberbank.ru",
+    "сбербанк": "https://online.sberbank.ru", "тинькофф": "https://www.tbank.ru", "т банк": "https://www.tbank.ru",
+    "яндекс музыку": "https://music.yandex.ru", "яндекс диск": "https://disk.yandex.ru",
+    "гугл диск": "https://drive.google.com", "google диск": "https://drive.google.com",
+    "колаб": "https://colab.research.google.com", "colab": "https://colab.research.google.com",
+    "кагл": "https://www.kaggle.com", "kaggle": "https://www.kaggle.com",
+    "инстаграм": "https://www.instagram.com", "instagram": "https://www.instagram.com",
+    "тикток": "https://www.tiktok.com", "tiktok": "https://www.tiktok.com",
+    "нетфликс": "https://www.netflix.com", "netflix": "https://www.netflix.com",
 }
 # Сайт — только если такой программы на компьютере нет: «открой клод» должно
 # открыть приложение, а не вкладку, как вышло на живом тесте
@@ -223,7 +291,93 @@ def _already_open(entry: dict):
     return None
 
 
+def _exact(*names):
+    """Запись из списка программ с ровно таким (или начинающимся так) названием."""
+    index = build_app_index()
+    for n in names:
+        for key, entry in index.items():
+            if (key == n or key.startswith(n + " ")) and "viewer" not in key:   # просмотрщик не редактор
+                return entry
+    return None
+
+
+def _open_place(target: str) -> None:
+    if target.startswith("ms-settings:"):
+        os.startfile(target)
+    else:
+        subprocess.Popen(["explorer.exe", target])
+
+
+def _launch_installed(name: str) -> str:
+    """Игра или программа из «Установки и удаления программ», которой нет в «Пуске».
+
+    «Запусти доту» не находилось: у игр Steam нет ярлыка в меню «Пуск», зато в
+    реестре у них деинсталлятор steam://uninstall/<номер> — по тому же номеру
+    Steam её и запускает.
+    """
+    try:
+        from skills import programs
+        p = programs.find(name)
+    except Exception:
+        return ""
+    if not p:
+        return ""
+    m = re.search(r"steam://uninstall/(\d+)", p.get("uninstall") or "")
+    if m:
+        os.startfile(f"steam://rungameid/{m.group(1)}")
+        return f"Запускаю {p['name']} через Steam."
+    loc = p.get("location")
+    if loc and os.path.isdir(loc):
+        exes = [f for f in os.listdir(loc) if f.lower().endswith(".exe")
+                and not re.search(r"unins|setup|update|crash|report|helper|install", f, re.I)]
+        want = re.sub(r"[^a-z0-9]", "", p["name"].lower())
+        exes.sort(key=lambda f: -difflib.SequenceMatcher(None, want, f.lower()[:-4]).ratio())
+        if exes:
+            os.startfile(os.path.join(loc, exes[0]))
+            return f"Открываю {p['name']}."
+    return ""
+
+
+def _suggest(name: str) -> str:
+    """Похожее из установленного — чтобы «не нашёл» не было тупиком."""
+    index = build_app_index()
+    close = difflib.get_close_matches(name.strip().lower(), list(index), n=2, cutoff=0.5)
+    names = [index[k]["name"] for k in close]
+    return f" Похожее из установленного: {', '.join(names)}." if names else ""
+
+
+def _home_page() -> str:
+    from core import config
+    return "https://www.google.com" if config.CFG.get("search_engine") == "google" else "https://ya.ru"
+
+
 def open_app(name: str, new_window: bool = False) -> str:
+    low = name.strip().lower()
+    if low in PLACES:
+        try:
+            _open_place(PLACES[low])
+            return f"Открываю {name}."
+        except Exception as e:
+            return f"Не смог открыть {name}: {e}"
+    if low in EQUIVALENTS:
+        entry = _exact(*EQUIVALENTS[low])
+        if entry:
+            return open_app(entry["name"], new_window)
+    if low in ("браузер", "хром", "гугл хром", "chrome", "google chrome"):
+        # Chrome у хозяина не стоит, а по похожему слову открывался Comet
+        entry = _exact("google chrome") if low != "браузер" else None
+        if not entry:
+            webbrowser.open(_home_page())
+            return ("Chrome не установлен — открыл браузер по умолчанию." if low != "браузер"
+                    else "Открываю браузер.")
+        return open_app(entry["name"], new_window)
+    if low in ("терминал", "консоль", "командная строка", "командную строку", "powershell", "пауэршелл"):
+        # Windows Terminal стоит не у всех — тогда PowerShell, а не «Git CMD» по похожему слову
+        entry = _exact("терминал", "windows terminal", "windows powershell")
+        if entry:
+            return open_app(entry["name"], new_window)
+        os.startfile("powershell.exe")
+        return "Открываю PowerShell."
     entry, display = find_app(name)
     if entry:
         # Уже открыта — выводим вперёд, а не плодим копию. Проверка 05.10.2026:
@@ -244,13 +398,18 @@ def open_app(name: str, new_window: bool = False) -> str:
     if shutil.which(query):                          # системные: notepad, calc, cmd
         os.startfile(shutil.which(query))
         return f"Открываю {query}."
-    low = name.strip().lower()
     if low in SITES:
         return open_site(low)
     if query in SITE_FALLBACK:
         webbrowser.open(SITE_FALLBACK[query])
         return f"Программы {name} на компьютере нет — открыл сайт."
-    return f"Не нашёл программу «{name}» среди установленных."
+    try:
+        launched = _launch_installed(name)
+    except Exception as e:
+        launched = f"Не смог запустить {name}: {e}"
+    if launched:
+        return launched
+    return f"Не нашёл программу «{name}» среди установленных.{_suggest(name)}"
 
 
 def open_site(what: str) -> str:

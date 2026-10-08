@@ -81,6 +81,64 @@ DO_FILLER = {"ты", "а", "ну", "можешь", "сможешь", "мог", "
              "где-то", "гдето", "примерно", "около", "ли", "мне", "нам", "давай", "и"}
 
 
+VERBS = (r"сделай|включи|открой|закрой|поставь|выключи|найди|запусти|прибавь|убавь|убери|сверни|"
+         r"разверни|переключи|переключись|напомни|покажи|запиши|запомни|заблокируй|громче|тише|"
+         r"останови|продолжи|отправь|напиши|пришли|скинь")
+SPLIT = re.compile(rf"\s+(?:и|а потом|потом|затем|и потом|и ещё|и еще)\s+(?=(?:{VERBS})\b)")
+
+
+def _site_key(target: str) -> str:
+    """«хабра» → «хабр», «госуслугах» → «госуслуги»: сайт называют в падеже."""
+    if target in S.SITES:
+        return target
+    for cut in (1, 2):
+        stem = target[:-cut]
+        for key in S.SITES:
+            if len(stem) >= 3 and key.startswith(stem) and len(key) - len(stem) <= 2:
+                return key
+    return ""
+
+
+def _open_target(target: str, site: bool = False) -> str:
+    key = _site_key(target)
+    if key or target.startswith("http") or ".com" in target or ".ru" in target:
+        return S.open_site(key or target)
+    if site:                                  # «открой сайт X», которого нет в списке, — найти его
+        return S.search_web(f"{target} официальный сайт")
+    return S.open_app(target)
+
+
+def _split_commands(t: str):
+    """«Включи музыку на ютубе и сделай погромче» → две команды.
+
+    Проверка 08.10.2026: вторая половина целиком уходила в запрос YouTube, а
+    «открой сайт хабра и найди статьи» искало программу с таким названием.
+    «Открой телеграм и напиши …» — одна команда, у неё своё правило.
+    """
+    if re.match(r"^(?:открой|зайди в)\s+(?:телеграм\w*|телег\w*|тг)\s+и\s+(?:напиши|отправь)", t):
+        return None
+    parts = [p.strip() for p in SPLIT.split(t) if p.strip()]
+    return parts if len(parts) > 1 else None
+
+
+def _run_parts(parts, cfg) -> Reply:
+    """Выполнить по очереди. Часть не по силам правилам — остаток целиком модели;
+    часть просит «да» — спрашиваем, остальное не делаем вслепую."""
+    said = []
+    for i, part in enumerate(parts):
+        r = handle(part, cfg)
+        if r.to_llm:
+            return Reply(say=" ".join(said), to_llm=True, meta={"llm_text": " и ".join(parts[i:])})
+        if r.pending:
+            rest = parts[i + 1:]
+            tail = f" Потом скажи ещё раз: «{' и '.join(rest)}»." if rest else ""
+            return Reply(say=" ".join(said + [r.say]) + tail, pending=r.pending,
+                         pending_desc=r.pending_desc)
+        if r.say:
+            said.append(r.say)
+    return Reply(say=" ".join(said) or "Сделано.")
+
+
 def _deferred(t: str):
     """«Ты можешь через 1,5 часа включить видео на ютубе» — выполнить в срок.
 
@@ -235,6 +293,12 @@ def _ui_rules(t: str):
     reply = _file_rules(t)
     if reply:
         return reply
+    # «Открой последний скачанный файл» раньше искало программу с таким названием
+    if re.search(r"^(?:открой|покажи|запусти)\b.*\bпоследн\w*\b.*\b(?:скачан|загружен|закачан|загрузк)", t):
+        from skills import files as F
+        return Reply(say=F.latest_download())
+    if re.search(r"\b(?:заряд\w*|батаре\w*|аккумулятор\w*)\b", t) and not re.search(r"\b(?:купи|закажи)\b", t):
+        return Reply(say=S.battery())
     from skills import ui as UI
     if re.search(r"^что\s+(?:тут\s+|здесь\s+|в этом окне\s+)?можно\s+нажать|"
                  r"^какие\s+(?:тут\s+|здесь\s+|есть\s+)?кнопки|^что\s+(?:есть\s+)?в этом окне", t):
@@ -287,6 +351,11 @@ def handle(text: str, cfg: dict) -> Reply:
     reply = _deferred(t)
     if reply:
         return reply
+
+    # --- несколько команд: «включи музыку на ютубе и сделай погромче» ---
+    parts = _split_commands(t)
+    if parts:
+        return _run_parts(parts, cfg)
 
     # --- видео и вкладки ---
     # Стоит выше громкости и общих «открой X» / «закрой X». Замер 05.10.2026:
@@ -435,7 +504,8 @@ def handle(text: str, cfg: dict) -> Reply:
     m = re.search(r"курс\s+(\w+)", t)
     if m:
         return Reply(say=TL.exchange_rate(m.group(1)))
-    m = re.search(r"сколько стоит\s+(доллар\w*|евро|юан\w*|биткоин\w*|фунт\w*|тенге|гривн\w*)", t)
+    m = re.search(r"сколько стоит\s+(доллар\w*|евро|юан\w*|биткоин\w*|биткойн\w*|фунт\w*|тенге|гривн\w*|"
+                  r"эфир\w*|тон|солан\w*|догикоин\w*|bitcoin|btc|eth|ton|usdt)\b", t)
     if m:
         return Reply(say=TL.exchange_rate(m.group(1)))
     m = re.search(r"(?:переведи|конвертируй|сколько будет)\s+(\d+(?:[.,]\d+)?)\s+"
@@ -479,13 +549,24 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=corrections.add(m.group(1), m.group(2)))
 
     # --- погода ---
-    m = re.search(r"погод\w*(?:\s+(?:в|на)\s+(.+))?$", t)
-    if m:
-        city = (m.group(1) or "").strip()
-        city = re.sub(r"^(городе|город)\s+", "", city)
-        if city in ("сегодня", "улице", "завтра", "сейчас", ""):
-            city = ""
-        return Reply(say=W.weather(city))
+    # --- новости: настоящие заголовки, а не пересказ, которого модель не видела ---
+    m = re.search(r"^(?:а\s+)?(?:какие|что за|расскажи|прочитай|скажи|давай|есть)?\s*(?:ещ[её]\s+)?"
+                  r"(?:мне\s+)?(?:последние\s+|свежие\s+|главные\s+)?новост\w*"
+                  r"(?:\s+(?:про|о|об|по)\s+(.+?))?(?:\s+(?:сегодня|дня|есть))?$", t)
+    if m or re.fullmatch(r"что (?:нового|случилось)(?: в мире| в стране| сегодня)?|что в новостях", t):
+        from skills import news
+        return Reply(say=news.headlines(5, (m.group(1) or "") if m else ""))
+
+    # «погода завтра», «какая завтра погода в казани», «погода на послезавтра в питере».
+    # Раньше «погода завтра» не совпадало с правилом и уходило модели
+    if re.search(r"\bпогод", t) and not re.search(r"\b(выходн|недел)", t):
+        day = 2 if "послезавтра" in t else 1 if "завтра" in t else 0
+        rest = re.sub(r"\b(?:на\s+)?(?:послезавтра|завтра|сегодня|сейчас)\b|\bна улице\b|\bбудет\b", " ", t)
+        m = (re.search(r"\bв(?:о)?\s+(?:городе\s+)?([а-яёa-z-]+(?:\s+[а-яёa-z-]+)?)\s*$", rest.strip())
+             or re.search(r"^в(?:о)?\s+(?:городе\s+)?([а-яёa-z-]+)\s+(?:какая|как|что)\b", rest.strip()))
+        city = m.group(1).strip() if m else ""
+        city = re.sub(r"\s*\bпогод\w*$", "", city)
+        return Reply(say=W.weather(city, day))
 
     # --- таймер ---
     if re.search(r"(сколько (осталось|там|на таймере)|что с таймером|таймеры)", t):
@@ -517,9 +598,10 @@ def handle(text: str, cfg: dict) -> Reply:
     m = re.search(r"^(?:запомни|заметь|запиши)(?:\s+что)?\s+(.+)$", t)
     if m:
         return Reply(say=memory.remember(m.group(1)))
-    m = re.search(r"^(?:что ты (?:помнишь|знаешь))\s*(?:про|о|об)?\s*(.*)$", t)
+    m = re.search(r"^что ты (?:обо мне |про меня )?(?:помнишь|знаешь)\s*(?:про|о|об|обо)?\s*(.*)$", t)
     if m:
-        return Reply(say=memory.recall(m.group(1)))
+        about = m.group(1).strip()
+        return Reply(say=memory.recall("" if about in ("мне", "меня", "обо мне") else about))
     m = re.search(r"^забудь\s+(?:про\s+|о\s+)?(.+)$", t)
     if m:
         return Reply(say=memory.forget(m.group(1)))
@@ -537,21 +619,55 @@ def handle(text: str, cfg: dict) -> Reply:
     if re.search(r"(последние|свежие) (ролики|видео)|как зашл[оа]", t):
         return Reply(say=YT.latest_videos())
 
+    # --- Telegram: выше общего «открой X», иначе «открой чат с Сашей» искал программу ---
+    # «Открой телеграм и напиши Саше привет», «напиши в телеге Хомяк Туп что буду поздно».
+    # Без входа в личный Telegram — через приложение на компьютере (skills/tg_desktop)
+    m = re.search(r"^(?:(?:открой|зайди в)\s+(?:телеграм\w*|телег\w*|тг)\s+и\s+)?"
+                  r"(?:напиши|отправь)\s+(.+)$", t)
+    if m:
+        rest = re.sub(r"\b(?:в|через)\s+(?:телеграм\w*|телег\w*|тг)\b|\bсообщение\b", " ", m.group(1))
+        rest = re.sub(r"\s+", " ", rest).strip()
+        if rest and not re.match(r"(?:мне|себе|на телефон|в блокнот|текст|письмо)\b", rest):
+            from skills import tg_desktop as TGD
+            who, msg = TGD.split_recipient(rest)
+            if not who and TG.ready():
+                who, _, msg = rest.partition(" ")
+            if who and msg:
+                desc, action = TG.prepare_send(who.strip(), msg.strip())
+                if desc is None:
+                    return Reply(say=action)
+                return Reply(say=f"Точно {desc}? Скажи «да».", pending=action, pending_desc=desc)
+    m = re.search(r"^(?:открой|зайди в|перейди в)\s+(?:чат|переписку)\s+(?:с\s+)?(.+)$", t) or \
+        re.search(r"^(?:открой|зайди)\s+(?:в\s+)?(?:телеграм\w*|телег\w*|тг)\s+(?:чат\s+)?(?:с\s+)?(?!и\s)(.+)$", t)
+    if m:
+        return Reply(say=TG.open_chat(m.group(1).strip()))
+
     # --- программы и сайты ---
     m = re.search(r"^(?:открой|запусти|включи|врубай|давай)\s+(.+)$", t)
     if m:
         target = m.group(1).strip()
+        site = bool(re.match(r"(?:мне\s+)?сайт\s", target))
         target = re.sub(r"^(мне|пожалуйста|программу|приложение|сайт)\s+", "", target)
-        if target in S.SITES or target.startswith("http") or ".com" in target or ".ru" in target:
-            return Reply(say=S.open_site(target))
-        return Reply(say=S.open_app(target))
+        # «включи первое» после поиска на YouTube — видео по номеру, а не программа «первое»
+        if target in ORDINALS and YT._last.get("items"):
+            return Reply(say=YT.play_number(ORDINALS[target]))
+        # «открой блокнот и калькулятор» — две программы, а не одна с таким названием
+        pieces = [p for p in re.split(r"\s+и\s+|\s*,\s*", target) if p]
+        if len(pieces) > 1 and all(len(p.split()) <= 3 for p in pieces):
+            return Reply(say=" ".join(_open_target(p, site) for p in pieces))
+        return Reply(say=_open_target(target, site))
 
     m = re.search(r"^(?:закрой|выключи|убей|заверши)\s+(.+)$", t)
     if m:
         target = m.group(1).strip()
-        if target in ("компьютер", "комп", "пк"):
-            pass          # обрабатывается ниже как выключение системы
-        else:
+        # «Закрой все окна кроме телеграма» — не программа с таким названием:
+        # закрывать чужие окна наугад нельзя, это решает модель (со своими «да»)
+        if re.search(r"\b(?:кроме|все|всё)\b", target):
+            return Reply(to_llm=True)
+        # Компьютер и «заверши работу» — ниже, как выключение с «да». Раньше
+        # «выключи компьютер через час» уходило сюда и искало программу
+        # «компьютер через час», а «заверши работу» — программу «работу»
+        if not re.match(r"(?:компьютер|комп|пк|ноутбук|ноут|систему|работу)\b", target):
             return Reply(say=S.close_app(target))
 
     if re.search(r"обнови (список )?программ", t):
@@ -605,8 +721,15 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.lock_screen())
 
     # --- опасное: требует подтверждения ---
-    if re.search(r"(выключи|отключи) (компьютер|комп|пк)|заверши работу", t):
-        mins = _num(t, 0) if "через" in t else 0
+    if re.search(r"(выключи|отключи) (компьютер|комп|пк|ноутбук|ноут|систему)|заверши работу", t):
+        # «через час» — 60 минут, а не «прямо сейчас»: цифр в нём нет, и раньше
+        # выключение предлагалось немедленно
+        mins = 0
+        if "через" in t:
+            from datetime import datetime
+            now = datetime.now().replace(microsecond=0)
+            at = memory._relative(t, now)
+            mins = round((at - now).total_seconds() / 60) if at else _num(t, 0)
         act = lambda: S.shutdown(mins)
         if confirm_needed:
             when = f" через {mins} минут" if mins else " прямо сейчас"
@@ -687,19 +810,14 @@ def handle(text: str, cfg: dict) -> Reply:
     # --- telegram ---
     if re.search(r"(что в (телеграме|телеге)|непрочитанн|кто (мне )?писал|новые сообщения)", t):
         return Reply(say=TG.unread())
-    m = re.search(r"^(?:что пишет|прочитай (?:чат )?(?:с )?|открой переписку с)\s+(.+)$", t)
+    # «прочитай чат с …» раньше не совпадало (пробел после «с» требовался дважды)
+    m = re.search(r"^(?:что пишет|что написал[аи]?|прочитай\s+(?:чат|переписку|сообщения)(?:\s+(?:с|со|от))?|"
+                  r"открой переписку с)\s+(.+)$", t)
     if m:
         return Reply(say=TG.read_chat(m.group(1).strip()))
-    m = re.search(r"^(?:напиши|отправь)\s+(.+?)\s+(?:сообщение\s+)?(?:что\s+)?(.+)$", t)
-    if m and TG.ready():
-        who, msg = m.group(1).strip(), m.group(2).strip()
-        desc, action = TG.prepare_send(who, msg)
-        if desc is None:
-            return Reply(say=action)
-        return Reply(say=f"Точно {desc}? Скажи «да».", pending=action, pending_desc=desc)
-    m = re.search(r"^(?:открой|зайди в|перейди в)\s+(?:чат|переписку)\s+(?:с\s+)?(.+)$", t)
-    if m and TG.ready():
-        return Reply(say=TG.open_chat(m.group(1).strip()))
+    if re.search(r"^прочитай\b.*\b(?:странице|странички|экране|окне|сайте)\b|^что (?:там )?написано\b", t):
+        from skills import ui as UI
+        return Reply(say=UI.read_text(""))
 
     # --- вежливость ---
     if re.fullmatch(r"(привет|здравствуй|здорово|хай|доброе утро|добрый день|добрый вечер)", t):

@@ -17,7 +17,7 @@ from core import config
 
 OWNER = 111222333
 PHRASES = ["который час", "сколько будет двести плюс сорок", "открой блокнот",
-           "какие ещё новости"]          # последнее — мимо правил, к мозгу
+           "кто такой илон маск"]        # последнее — мимо правил, к мозгу
 
 
 def make_ogg(text: str) -> bytes:
@@ -64,7 +64,7 @@ def main():
     # Мозг думает дольше двух секунд, как без сети со своей моделью. 07.10.2026
     # в таком случае телефон получал «Не получилось ответить», не дождавшись ответа
     import time as _time
-    j.brain.ask = lambda text, image_path=None: _time.sleep(3) or "Новостей нет, всё спокойно."
+    j.brain.ask = lambda text, image_path=None: _time.sleep(3) or "Илон Маск — предприниматель."
     print("поднимаю распознаватель...")
     j.ears = Ears(j.cfg, str(config.MODELS))
 

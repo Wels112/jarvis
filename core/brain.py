@@ -277,7 +277,10 @@ def _t_open_site(b, site: str):
 
 
 def _t_web_search(b, query: str):
-    return S.search_web(query)
+    # 08.10.2026 после поиска «какие новости» модель сказала «в мире всё спокойно»:
+    # страницу поиска она не видит, это была выдумка. Говорим ей об этом прямо
+    return (S.search_web(query) + ". Поиск открыт в браузере хозяина; результатов ты не видишь — "
+            "не пересказывай и не придумывай их, просто скажи, что открыл.")
 
 
 def _t_volume(b, level: int = None, change: int = None, mute: bool = None,
