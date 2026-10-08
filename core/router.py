@@ -10,8 +10,10 @@
 Опасные действия не выполняются сразу: роутер возвращает их как «отложенные»
 вместе с вопросом, и главный цикл переспрашивает голосом.
 """
+import os
 import re
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -58,6 +60,53 @@ def _num(text: str, default=None):
         if w in text:
             return v
     return default
+
+
+# Неопределённая форма → повелительная: «можешь открыть ютуб» → «открой ютуб»
+IMPERATIVE = {
+    "открыть": "открой", "включить": "включи", "выключить": "выключи", "запустить": "запусти",
+    "закрыть": "закрой", "сделать": "сделай", "поставить": "поставь", "найти": "найди",
+    "показать": "покажи", "написать": "напиши", "отправить": "отправь", "напомнить": "напомни",
+    "прочитать": "прочитай", "перезагрузить": "перезагрузи", "убавить": "убавь",
+    "прибавить": "прибавь", "переключить": "переключи", "свернуть": "сверни", "засечь": "засеки",
+    "запомнить": "запомни", "записать": "запиши", "посчитать": "посчитай", "перевести": "переведи",
+    "скинуть": "скинь", "прислать": "пришли", "остановить": "останови", "заблокировать": "заблокируй",
+    "удалить": "удали", "почистить": "почисти", "сказать": "скажи", "рассказать": "расскажи",
+    "посмотреть": "включи", "послушать": "включи", "зайти": "зайди", "перейти": "перейди",
+}
+POLITE_LEAD = re.compile(
+    r"^(?:(?:а|ну|так|слушай|эй|короче)\s+)*"
+    r"(?:(?:ты\s+)?(?:можешь|сможешь|не\s+можешь|не\s+мог\s+бы|мог\s+бы|могла\s+бы|можно)(?:\s+ли)?"
+    r"|(?:мне\s+)?(?:нужно|надо)|(?:я\s+)?(?:хочу|хотел\s+бы|хотела\s+бы)|давай)\s+(?:мне\s+)?")
+
+
+def _polite(t: str) -> str:
+    """Разговорную просьбу — в команду, которую понимают правила.
+
+    Проверка 08.10.2026: «можешь открыть ютуб», «а открой-ка стим», «мне нужно
+    открыть госуслуги» уходили модели (без сети — к отказу), «пожалуйста»
+    попадало в название программы («хром пожалуйста»), а в дело — в текст
+    («пожалуйста выпить таблетку»).
+    """
+    t = re.sub(r"\b(?:пожалуйста|плиз|будь\s+добр[аы]?|будь\s+другом|если\s+не\s+сложно)\b", " ", t)
+    t = re.sub(r"\b(\w+)-ка\b", r"\1", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"^(?:(?:а|ну|так|слушай|эй|короче|джарвис)\s+)+(?=\S)", "", t)   # «а открой стим»
+    m = POLITE_LEAD.match(t)
+    if m and t[m.end():]:
+        nxt = t[m.end():].split(" ", 1)[0]
+        # «давай доту» — это «запусти»; снимаем «давай», только когда за ним глагол
+        if not (m.group(0).rstrip().endswith("давай") and nxt not in IMPERATIVE
+                and nxt not in IMPERATIVE.values()):
+            t = t[m.end():]                     # «можно погромче» → «погромче»
+    verb, _, rest = t.partition(" ")
+    if verb in IMPERATIVE:
+        new = IMPERATIVE[verb]
+        if verb in ("посмотреть", "послушать") and not re.search(
+                r"ютуб|youtube|видео|ролик|клип|музык|песн|трек|фильм|сериал|мультик", rest):
+            new = "покажи"                      # «хочу посмотреть погоду» — не «включи погоду»
+        t = f"{new} {rest}".strip()
+    return t
 
 
 def _snooze_minutes(t: str, default: int = 10) -> int:
@@ -279,12 +328,19 @@ def _file_rules(t: str):
                          ORDINALS.get(m.group(1)))
     elif re.search(r"\b(его|её|ее|этот|этот файл|найденн\w+)\b", t):
         n = 1
+    elif (re.fullmatch(r"(?:пришли|скинь|отправь|перешли)\s+(?:мне\s+)?(?:на телефон|в телеграм\w*|мне)", t)
+          and time.time() - F.last_at < 180):
+        n = 1                            # «сделай скриншот и пришли на телефон» — только что сделанное
     if n is None:
         return None
     if re.search(r"^(?:открой|запусти|покажи)\b", t):
         return Reply(say=F.open_found(n))
     if re.search(r"^(?:пришли|скинь|отправь|перешли)\b.*(?:телефон|телеграм|мне)", t):
-        return Reply(to_llm=True)        # отправка — через мозг: ему виден телефон
+        from core import phone
+        p = phone.CURRENT
+        if p and p.owner and F.last(n):
+            return Reply(say=p.send_file(F.last(n)))
+        return Reply(to_llm=True)        # телефона нет — пусть мозг честно скажет почему
     return None
 
 
@@ -327,7 +383,7 @@ def _ui_rules(t: str):
 
 
 def handle(text: str, cfg: dict) -> Reply:
-    t = normalize(text)
+    t = _polite(normalize(text))
     if not t:
         return Reply()
 
@@ -343,7 +399,8 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.cancel_shutdown())
 
     # --- время и дата ---
-    if re.search(r"(который час|сколько времени|какое (сегодня )?число|какой сегодня день)", t):
+    if re.search(r"(который (сейчас )?час|сколько (сейчас )?времени|какое (сегодня )?число|"
+                 r"какой сегодня день)", t):
         return Reply(say=S.what_time())
 
     # --- отложенная команда: «через полтора часа включи видео» ---
@@ -387,6 +444,11 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.change_volume(+10))
     if re.search(r"^(?:сделай\s+)?(?:музыку|звук|видео|громкость)?\s*(?:по)?тише\b", t):
         return Reply(say=S.change_volume(-10))
+    # «убавь звук», «прибавь громкость» — без числа: на 10
+    if re.fullmatch(r"(?:убавь|уменьши|приглуши|снизь|понизь)\s+(?:звук|громкость|музыку)", t):
+        return Reply(say=S.change_volume(-10))
+    if re.fullmatch(r"(?:прибавь|увеличь|подними|повысь|добавь)\s+(?:звук|громкость|музыку)", t):
+        return Reply(say=S.change_volume(+10))
     if re.search(r"(выключи|отключи|убери) звук|заглуши", t):
         return Reply(say=S.mute(True))
     if re.search(r"(включи|верни) звук", t):
@@ -397,7 +459,7 @@ def handle(text: str, cfg: dict) -> Reply:
     # --- плеер ---
     if re.search(r"^(поставь на )?паузу$|^пауза$|^останови музыку", t):
         return Reply(say=S.media_key("pause"))
-    if re.search(r"^(включи|продолжи) музыку$|^играй$", t):
+    if re.search(r"^(включи|продолжи|поставь|запусти) музыку$|^играй$", t):
         return Reply(say=S.media_key("play"))
     if re.search(r"следующ(ий|ая) (трек|песня|песню)|переключи (трек|песню)|дальше", t):
         return Reply(say=S.media_key("next"))
@@ -572,7 +634,8 @@ def handle(text: str, cfg: dict) -> Reply:
     if re.search(r"(сколько (осталось|там|на таймере)|что с таймером|таймеры)", t):
         return Reply(say=memory.active_timers())
 
-    m = re.search(r"таймер\w*\s*(?:на\s*)?(\d+)\s*(секунд\w*|сек|минут\w*|мин|час\w*)?", t)
+    m = (re.search(r"таймер\w*\s*(?:на\s*)?(\d+)\s*(секунд\w*|сек|минут\w*|мин|час\w*)?", t)
+         or re.search(r"^засеки\s+(\d+)\s*(секунд\w*|сек|минут\w*|мин|час\w*)?$", t))
     if m:
         n = int(m.group(1))
         unit = m.group(2) or "минут"
@@ -643,7 +706,7 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=TG.open_chat(m.group(1).strip()))
 
     # --- программы и сайты ---
-    m = re.search(r"^(?:открой|запусти|включи|врубай|давай)\s+(.+)$", t)
+    m = re.search(r"^(?:открой|запусти|включи|врубай|давай|зайди\s+(?:в|на)|перейди\s+(?:в|на))\s+(.+)$", t)
     if m:
         target = m.group(1).strip()
         site = bool(re.match(r"(?:мне\s+)?сайт\s", target))
@@ -713,7 +776,7 @@ def handle(text: str, cfg: dict) -> Reply:
         q = m.group(1).strip()
         # «найди у меня файл с отчётом» — это диск, а не интернет: раньше «у меня»
         # перед словом «файл» ломало правило, и поиск уходил в Google
-        mf = re.match(r"(?:у меня\s+|на компе\s+|на компьютере\s+)?(?:файл\w*|документ\w*|папк\w+)"
+        mf = re.match(r"(?:у меня\s+|мне\s+|на компе\s+|на компьютере\s+)?(?:файл\w*|документ\w*|папк\w+)"
                       r"\s+(?:с\s+|про\s+|где\s+|под названием\s+)?(.+)", q)
         if mf:
             return Reply(say=S.find_file(mf.group(1)))
@@ -726,6 +789,10 @@ def handle(text: str, cfg: dict) -> Reply:
         return Reply(say=S.top_processes())
     if re.search(r"(сделай )?скриншот|сфотографируй экран|снимок экрана", t):
         path = S.screenshot()
+        # Последний «найденный» файл — чтобы «пришли его на телефон» знало, что слать
+        from skills import files as F
+        if path and os.path.exists(str(path)):
+            F._last, F.last_at = [(os.path.basename(path), str(path), time.time())], time.time()
         return Reply(say="Скриншот готов.", meta={"screenshot": path})
     if re.search(r"заблокируй (экран|компьютер)|блокировка", t):
         return Reply(say=S.lock_screen())

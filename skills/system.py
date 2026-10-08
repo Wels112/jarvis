@@ -409,6 +409,12 @@ def open_app(name: str, new_window: bool = False) -> str:
         launched = f"Не смог запустить {name}: {e}"
     if launched:
         return launched
+    # «открой стима», «зайди в дискорда» — в падеже: пробуем основу, но только
+    # если она — известное прозвище, а не случайно похожее слово
+    for cut in ("ом", "ой", "ах", "у", "а", "е", "ы", "и"):
+        base = low[:-len(cut)]
+        if low.endswith(cut) and len(base) >= 3 and (base in ALIASES or base in SITES or base in PLACES):
+            return open_app(base, new_window)
     return f"Не нашёл программу «{name}» среди установленных.{_suggest(name)}"
 
 

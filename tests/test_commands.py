@@ -105,6 +105,54 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} несколько команд: правилам — своё, модели — остаток")
 
+    # Разговорные формы (tests/probe_casual.py): «можешь открыть», «-ка», «пожалуйста»
+    for phrase, want in (("можешь открыть ютуб", ("system.open_site", "ютуб")),
+                         ("ты можешь открыть телеграм", ("system.open_app", "телеграм")),
+                         ("а открой-ка стим", ("system.open_app", "стим")),
+                         ("запусти мне хром пожалуйста", ("system.open_app", "хром")),
+                         ("мне нужно открыть госуслуги", ("system.open_site", "госуслуги")),
+                         ("хочу посмотреть ютуб", ("system.open_site", "ютуб")),
+                         ("будь добр открой загрузки", ("system.open_app", "загрузки")),
+                         ("зайди в телегу", ("system.open_app", "телегу")),
+                         ("можешь сделать потише", ("system.change_volume", -10)),
+                         ("убавь звук", ("system.change_volume", -10)),
+                         ("поставь музыку", ("system.media_key", "play"))):
+        acted.clear()
+        router.handle(router.normalize(phrase), config.CFG)
+        got = [(n, a[0] if a else None) for n, a in acted]
+        ok = got == [want]
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} «{phrase}» → {got}")
+    for phrase, part in (("можешь напомнить мне завтра в 10 позвонить маме", "Записал: позвонить маме"),
+                         ("напомни пожалуйста через час выпить таблетку", "Записал: выпить таблетку"),
+                         ("засеки 5 минут", "Таймер на 5 минут"),
+                         ("сколько сейчас времени", "Сейчас"),
+                         ("найди мне файл резюме", "")):
+        r = router.handle(router.normalize(phrase), config.CFG)
+        ok = not r.to_llm and part in r.say and not r.say.startswith("[песочница] system.search_web")
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} «{phrase}» → {'МОДЕЛИ' if r.to_llm else r.say[:60]}")
+
+    # «Сделай скриншот и пришли на телефон» — снимок уходит через бота
+    import core.phone as phone_module
+    shot = tmp / "jarvis_test.png"
+    S.screenshot = lambda: (shot.write_bytes(b"png"), str(shot))[1]
+
+    class FakePhone:
+        owner, sent = 1, []
+
+        def send_file(self, path):
+            self.sent.append(path)
+            return f"Отправил {Path(path).name} тебе в Telegram."
+    phone_module.CURRENT = fp = FakePhone()
+    try:
+        r = router.handle(router.normalize("сделай скриншот и пришли на телефон"), config.CFG)
+    finally:
+        phone_module.CURRENT = None
+    ok = fp.sent == [str(shot)] and "Отправил jarvis_test.png" in r.say
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} «сделай скриншот и пришли на телефон» → «{r.say}»")
+
     # Живой разговор идёт мимо правил — те же умения через инструмент jarvis_command
     from core.live import run_jarvis_command, LIVE_TOOLS
 
