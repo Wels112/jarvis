@@ -40,7 +40,7 @@ OUTCOMES = [
     ("выключи компьютер через час", "да", "через 60 минут"),           # было: close_app «компьютер через час»
     ("выключи комп через 30 минут", "да", "через 30 минут"),
     ("заверши работу", "да", "Выключить компьютер"),                    # было: close_app «работу»
-    ("закрой все окна кроме телеграма", "модель", ""),                  # было: close_app «все окна кроме…»
+    ("закрой окна кроме вот этих двух", "модель", ""),                  # было: close_app «окна кроме…»
     ("что ты обо мне помнишь", "ответ", ""),
     ("сколько заряда", "ответ", ""),
     ("погода завтра", "ответ", ""),
@@ -154,6 +154,23 @@ def main():
             print(f"{'ok ' if ok else 'НЕТ'} «{phrase}» → {r.say[:70]}")
     finally:
         SP.Popen = popen
+
+    # «Закрой все окна кроме телеграма» — как крестиком и после «да», а не Stop-Process
+    from skills import desktop as Dk
+    posted = []
+    real_lw, real_post = Dk.list_windows, Dk.win32gui.PostMessage
+    Dk.list_windows = lambda limit=12: [(1, "Jarvis", "cmd.exe"), (2, "Хомяк Туп @ Wels", "Telegram.exe"),
+                                        (3, "Habr — Яндекс Браузер", "browser.exe"), (4, "main.py - VS Code", "Code.exe")]
+    Dk.win32gui.PostMessage = lambda hwnd, msg, a, b: posted.append(hwnd)
+    try:
+        r = router.handle(router.normalize("закрой все окна кроме телеграма"), config.CFG)
+        asked = r.pending and "Закрыть 2 окна: VS Code, Яндекс Браузер; оставить Telegram" in r.say and not posted
+        done = r.pending() if r.pending else ""
+        ok = asked and posted == [3, 4] and done.startswith("Закрыл 2 окон")
+    finally:
+        Dk.list_windows, Dk.win32gui.PostMessage = real_lw, real_post
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} «закрой все окна кроме телеграма» → «{r.say}» → закрыты {posted}")
 
     # «Сделай скриншот и пришли на телефон» — снимок уходит через бота
     import core.phone as phone_module

@@ -739,8 +739,15 @@ def handle(text: str, cfg: dict) -> Reply:
     m = re.search(r"^(?:закрой|выключи|убей|заверши)\s+(.+)$", t)
     if m:
         target = m.group(1).strip()
-        # «Закрой все окна кроме телеграма» — не программа с таким названием:
-        # закрывать чужие окна наугад нельзя, это решает модель (со своими «да»)
+        # «Закрой все окна кроме телеграма» — как крестиком, после «да». Модель на
+        # такое собирала PowerShell Stop-Process, а он убивает несохранённое
+        mc = re.fullmatch(r"(?:все|всё)(?:\s+(?:окна|программы|приложения))?(?:\s+кроме\s+(.+))?", target)
+        if mc:
+            keep = [k for k in re.split(r"\s+и\s+|\s*,\s*", mc.group(1) or "") if k]
+            desc, act = D.close_all_windows(keep)
+            if desc is None:
+                return Reply(say=act)
+            return Reply(say=f"{desc[:1].upper() + desc[1:]}? Скажи «да».", pending=act, pending_desc=desc)
         if re.search(r"\b(?:кроме|все|всё)\b", target):
             return Reply(to_llm=True)
         # Компьютер и «заверши работу» — ниже, как выключение с «да». Раньше

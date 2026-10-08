@@ -216,6 +216,69 @@ def minimize_all() -> str:
     return "Свернул всё."
 
 
+def _keeps(name: str) -> set:
+    """Как узнать программу, которую оставить: «телеграма» → telegram, «хром» → chrome."""
+    from skills.system import ALIASES, _forms
+    name = name.strip().lower()
+    out = set()
+    for cut in (0, 1, 2):                      # падеж: «телеграма», «хрома», «стима»
+        base = name[:-cut] if cut else name
+        if len(base) >= 3:
+            out |= _forms(base) | ({ALIASES[base]} if base in ALIASES else set())
+    return {k for k in out if len(k) >= 3}
+
+
+PROC_LABEL = {"browser": "Яндекс Браузер", "chrome": "Chrome", "msedge": "Edge", "firefox": "Firefox",
+              "claude": "Claude", "telegram": "Telegram", "code": "VS Code", "explorer": "Проводник",
+              "notepad": "Блокнот", "applicationframehost": "приложение Windows", "steam": "Steam",
+              "discord": "Discord", "comet": "Comet"}
+
+
+def _label(proc: str) -> str:
+    stem = proc[:-4] if proc.lower().endswith(".exe") else proc
+    return PROC_LABEL.get(stem.lower(), stem)
+
+
+def _windows_word(n: int) -> str:
+    if n % 10 == 1 and n % 100 != 11:
+        return "окно"
+    return "окна" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "окон"
+
+
+def close_all_windows(keep=()):
+    """(описание, действие) — закрыть все окна, кроме названных.
+
+    Проверка 08.10.2026: на «закрой все окна кроме телеграма» модель собрала
+    PowerShell Stop-Process — он убивает программы, и несохранённое пропадает.
+    Здесь — как крестиком (WM_CLOSE): программа сама спросит про сохранение.
+    Окно самого Джарвиса не трогаем никогда. (None, причина) — закрывать нечего.
+    """
+    marks = set().union(*[_keeps(k) for k in keep]) if keep else set()
+    victims, kept = [], set()
+    for hwnd, title, proc in list_windows(80):
+        low_t, low_p = title.lower(), proc.lower()
+        if low_t.split(" - ")[0].strip() == "jarvis":
+            continue                          # консоль самого Джарвиса
+        if any(m in low_t or m in low_p for m in marks):
+            kept.add(_label(proc))
+            continue
+        victims.append((hwnd, title, proc))
+    if not victims:
+        return None, "Закрывать нечего." + (f" Оставлено: {', '.join(sorted(kept))}." if kept else "")
+    names = sorted({_label(p) for _, _, p in victims})
+    desc = (f"закрыть {len(victims)} {_windows_word(len(victims))}: {', '.join(names[:6])}"
+            f"{'…' if len(names) > 6 else ''}" + (f"; оставить {', '.join(sorted(kept))}" if kept else ""))
+
+    def act():
+        for hwnd, _t, _p in victims:
+            try:
+                win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+            except Exception:
+                pass
+        return f"Закрыл {len(victims)} окон — как крестиком: где не сохранено, программа спросит."
+    return desc, act
+
+
 def close_window() -> str:
     hwnd = win32gui.GetForegroundWindow()
     win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
