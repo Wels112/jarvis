@@ -146,8 +146,13 @@ if ($name) {
 # Предупреждение про символические ссылки выглядит как поломка, хотя ничего не
 # ломает: на Windows без режима разработчика их просто нет, файлы копируются
 $env:HF_HUB_DISABLE_SYMLINKS_WARNING = '1'
+# И «unauthenticated requests to the HF Hub»: модель открытая, ключ не нужен, а
+# красная надпись при проверке 09.10.2026 выглядела как сбой установки
+$env:HF_HUB_VERBOSITY = 'error'
 & $py -c @"
-import sys
+import sys, warnings, logging
+warnings.filterwarnings('ignore')
+logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
 sys.path.insert(0, r'$root')
 from core import config
 from faster_whisper import WhisperModel

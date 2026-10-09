@@ -126,34 +126,57 @@ def check():
             from core.brain import Brain
             b = Brain(config.CFG)
             r = b.ask("Ответь одним словом: работает?")
-            ok.append(f"мозг Gemini — {r[:40]}")
+            # Без VPN облако отвечает отказом, а не исключением — смотрим last_error
+            (ok if b.last_error is None else bad).append(f"мозг Gemini — {r[:90]}")
         except Exception as e:
             bad.append(f"мозг Gemini — {e}")
     else:
         bad.append("мозг Gemini — нет ключа (умный режим выключен)")
 
+    # Необязательное — отдельно: «не авторизован» и «нет ключа» среди поломок
+    # пугали при проверке установки 09.10.2026, хотя без них всё работает
+    optional = []
     if config.env("YOUTUBE_API_KEY"):
         from skills import youtube as YT
         r = YT.search_videos("test", 1)
         (ok if "не ответил" not in r else bad).append("YouTube — ключ рабочий")
     else:
-        bad.append("YouTube — нет ключа")
+        optional.append("ключ YouTube — без него видео включаются так же; нужен только для статистики канала")
+
+    token = config.env("TELEGRAM_BOT_TOKEN")
+    if token:
+        try:
+            import requests
+            me = requests.get(f"https://api.telegram.org/bot{token}/getMe", timeout=15).json()
+            (ok if me.get("ok") else bad).append(
+                f"бот Telegram — @{me['result']['username']} на связи" if me.get("ok")
+                else "бот Telegram — токен не подошёл, проверь его у @BotFather")
+        except Exception:
+            bad.append("бот Telegram — нет связи с Telegram (интернет, VPN)")
+    else:
+        optional.append("бот Telegram — нет токена: с телефона управлять нельзя (бот создаётся у @BotFather)")
 
     from skills import telegram as TG
-    (ok if TG.ready() else bad).append(
-        f"Telegram — {'подключён' if TG.ready() else 'не авторизован'}")
+    if TG.ready():
+        ok.append("личный Telegram — подключён")
+    else:
+        optional.append("личный Telegram — не подключён: писать людям можно и через Telegram на компьютере")
 
     print()
     for line in ok:
         print(f"  [ok]  {line}")
     for line in bad:
-        print(f"  [--]  {line}")
+        print(f"  [!!]  {line}")
+    for line in optional:
+        print(f"  [  ]  {line}")
     print()
-    if not any("Gemini" in b and "нет ключа" in b for b in bad):
-        print("Всё готово. Запускай jarvis.bat")
-    else:
+    if any("Gemini" in b and "нет ключа" in b for b in bad):
         print("Джарвис заработает и так, но без свободного разговора.")
         print("Ключ Gemini берётся тут: https://aistudio.google.com/apikey")
+    elif any("Gemini" in b for b in bad):
+        print("Джарвис заработает и так, но умный режим — только с VPN: включи его и запусти проверку снова.")
+    else:
+        print("Всё готово. Запускай jarvis.bat")
 
 
 if __name__ == "__main__":
