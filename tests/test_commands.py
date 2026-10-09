@@ -172,6 +172,42 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} «закрой все окна кроме телеграма» → «{r.say}» → закрыты {posted}")
 
+    # Музыка без глагола и «выключи музыку/видео» (журнал 09.10.2026: на «спокойная
+    # музыка» своя модель выключила звук; «выключи музыку» искало программу)
+    for phrase, want in (("спокойная музыка", ("youtube.play_on_youtube", "спокойная музыка")),
+                         ("музыку для работы", ("youtube.play_on_youtube", "музыку для работы")),
+                         ("включи спокойную музыку на ютубе", ("youtube.play_on_youtube", "спокойную музыку")),
+                         ("выключи музыку", ("system.media_key", "pause")),
+                         ("выключи видео", ("desktop.video", "pause"))):
+        acted.clear()
+        router.handle(router.normalize(phrase), config.CFG)
+        got = [(n, a[0] if a else None) for n, a in acted]
+        ok = got == [want]
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} «{phrase}» → {got}")
+
+    # Своя модель (без облака): инструменты — только на просьбы, ответ — коротко
+    from core.local_brain import looks_like_request, short_answer
+    from train.evaluate import cases
+    need = [p for p, w, _k in cases() if w != {None}]
+    passed = sum(looks_like_request(p) for p in need)
+    statements = ["Я уже встал", "Глаза автомобиля Mercedes", "мы завтра едем на дачу", "ну да"]
+    ok = passed >= len(need) - 2 and not any(looks_like_request(s) for s in statements)
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} просьбы своей модели: {passed}/{len(need)} узнаны, "
+          f"разговор в комнате — без инструментов")
+    long = ("Смотреть на экран не могу — у меня нет доступа к вашему устройству.\n\n"
+            "Что сейчас на экране? Вы можете сказать.\n\nА что вы делаете?")
+    ok = short_answer(long) == "Смотреть на экран не могу — у меня нет доступа к вашему устройству."
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} ответ своей модели — первый абзац: «{short_answer(long)}»")
+
+    from core.brain import screen_without_vision
+    said = screen_without_vision()
+    ok = said.startswith("Картинку экрана сейчас не вижу") and "Открыто" in said
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} экран без зрения: «{said[:70]}…»")
+
     # «Сделай скриншот и пришли на телефон» — снимок уходит через бота
     import core.phone as phone_module
     shot = tmp / "jarvis_test.png"

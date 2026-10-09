@@ -341,6 +341,7 @@ class Jarvis:
 
         wake = self.cfg["wake_words"]
         now = time.time()
+        called = not from_voice                 # с телефона и текстом — всегда ему
 
         if from_voice:
             called = router.has_wake(text, wake)
@@ -398,6 +399,14 @@ class Jarvis:
             return True
 
         if reply.to_llm:
+            # Имени не было, фраза — не просьба и не вопрос: скорее всего, это
+            # разговор в комнате. 09.10.2026 на «Я уже встал» и «Глаза автомобиля
+            # Mercedes» Джарвис полез смотреть экран и отвечал чепухой
+            from core.local_brain import looks_like_request
+            if not called and not reply.say and not looks_like_request(text):
+                print(f"   (похоже, не мне: {text})")
+                log.write("info", f"не просьба и без имени — молчу: {text[:60]}")
+                return True
             if reply.say:                 # первые команды из нескольких уже выполнены правилами
                 self.say(reply.say)
             if not self.brain or not self.brain.ready:

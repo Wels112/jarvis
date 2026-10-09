@@ -61,6 +61,26 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} другой сбой — без VPN, просьба не пропала: {spoken}")
 
+    # Разговор в комнате после такого сбоя: окно открыто, но фраза — не просьба
+    # и без имени. 09.10.2026 на «Я уже встал» Джарвис полез смотреть экран
+    import time
+    asked = []
+    j.brain.ask = lambda text, image_path=None: asked.append(text) or "ответ"
+    j.live = Live("error: 1007 None. User location is not supported for the API use.")
+    j.ears.transcribe = lambda audio: "Я уже встал"
+    spoken.clear()
+    j._converse(audio=b"\0" * 3200)
+    ignored = not asked and not spoken
+    j.awake_until = time.time() + 30
+    j.process("Глаза автомобиля Mercedes", from_voice=True)
+    ignored = ignored and not asked
+    j.process("кто такой илон маск", from_voice=True)               # вопрос — отвечает
+    j.process("Джарвис, мы завтра едем на дачу", from_voice=True)   # по имени — отвечает
+    ok = ignored and asked == ["кто такой илон маск", "мы завтра едем на дачу"]
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} разговор в комнате без имени — молчит; вопрос и обращение по имени — "
+          f"отвечает: {asked}")
+
     print(f"\nошибок: {errors}")
     return errors == 0
 

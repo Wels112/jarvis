@@ -391,7 +391,26 @@ def _t_look_at_screen(b, question: str = "Что на экране?"):
         return " ".join(p.get("text", "") for p in
                         d["candidates"][0]["content"]["parts"]).strip()
     except Exception as e:
-        return f"не смог рассмотреть экран: {e}"
+        # Без облака (нет VPN) картинку не рассмотреть — но что открыто и что
+        # написано в окне, видно и так. 09.10.2026 вместо этого звучало
+        # «у меня нет доступа к вашему устройству» и встречные вопросы
+        log.write("error", f"[зрение] {re.sub(chr(10), ' ', str(e))[:120]}")
+        return screen_without_vision()
+
+
+def screen_without_vision() -> str:
+    """Что на экране без зрения: окна и текст активного окна через UI Automation."""
+    try:
+        windows = D.windows_report()
+    except Exception:
+        windows = ""
+    try:
+        from skills import ui as UI
+        text = UI.read_text("", limit=600)
+    except Exception:
+        text = ""
+    return ("Картинку экрана сейчас не вижу (умный режим недоступен), но вот что открыто. "
+            f"{windows} {text}").strip()
 
 
 def _t_find_file(b, pattern: str, where: str = None):
