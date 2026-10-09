@@ -130,6 +130,9 @@ class Phone:
         # чата надо было вписывать в настройки руками — у клиента это тупик
         self.pair_code = "" if self.owner else f"{secrets.randbelow(10 ** 6):06d}"
         self._pair_fails = {}
+        self.down_since = 0.0          # когда пропала связь с Telegram (0 — связь есть)
+        self.last_error = ""
+        self._outbox = []              # напоминания, не ушедшие без связи: (текст, когда, задача)
 
     # ---------- связь ----------
     @property
@@ -148,7 +151,12 @@ class Phone:
                 return None
             return data.get("result")
         except Exception as e:
-            log.write("error", f"[телефон] {method}: {type(e).__name__} {str(e)[:90]}")
+            self.last_error = f"{type(e).__name__} {str(e)[:90]}"
+            # Пока связи нет, каждый запрос падает одинаково: 08.10.2026 за полтора
+            # часа без VPN в журнал легло 781 одинаковая строка. Пропажу и
+            # возвращение связи пишет опрос (_poll_loop) — по разу
+            if not self.down_since:
+                log.write("error", f"[телефон] {method}: {self.last_error}")
             return None
 
     def check(self) -> str:
@@ -280,13 +288,41 @@ class Phone:
         """
         if not (self.push and self.available and self.owner):
             return
+        if not self._deliver(text, task):
+            # Связи нет (VPN выключен, сеть упала) — напоминание не теряем: уйдёт,
+            # как только опрос увидит, что связь вернулась
+            from datetime import datetime
+            self._outbox = (self._outbox + [(text, datetime.now(), task)])[-30:]
+            log.write("info", f"[телефон] не ушло, отправлю при связи: {text[:60]}")
+
+    def _deliver(self, text: str, task: dict = None) -> bool:
         if task and task.get("id") and not task.get("timer"):
             if self._call("sendMessage", chat_id=self.owner, text=text,
                           reply_markup=json.dumps(reminder_buttons(task["id"]),
                                                   ensure_ascii=False)) is not None:
-                return
+                return True
             # Кнопки не прошли — напоминание всё равно должно дойти
-        self.send(text)
+        return self.send(text)
+
+    def _went_down(self):
+        if not self.down_since:
+            self.down_since = time.time()
+            log.write("error", f"[телефон] связь с Telegram пропала ({self.last_error}) — жду и проверяю реже")
+
+    def _back_online(self):
+        gone = (time.time() - self.down_since) / 60
+        self.down_since = 0.0
+        log.write("info", f"[телефон] связь с Telegram вернулась (не было {gone:.0f} мин)")
+        self._flush_outbox()
+
+    def _flush_outbox(self):
+        """Связь вернулась — досылаем то, что не ушло, с честным временем."""
+        queued, self._outbox = self._outbox, []
+        for i, (text, at, task) in enumerate(queued):
+            late = f"{text}\n(не дошло вовремя — не было связи; должно было прийти в {at:%H:%M})"
+            if not self._deliver(late, task):
+                self._outbox = queued[i:] + self._outbox      # снова пропала — отложим остальное
+                return
 
     def _handle_button(self, query: dict):
         """Нажата кнопка под напоминанием: отметить сделанным или отложить."""
@@ -631,13 +667,20 @@ class Phone:
         ], ensure_ascii=False))
 
     def _poll_loop(self):
+        pause = 5
         while not self._stop.is_set():
             updates = self._call("getUpdates", _wait=POLL_TIMEOUT + 10,
                                  offset=self._offset, timeout=POLL_TIMEOUT,
                                  allowed_updates='["message","callback_query"]')
             if updates is None:
-                time.sleep(5)                         # связь дрогнула — не долбим
+                self._went_down()
+                # Чем дольше нет связи, тем реже стучимся: 5, 10, 20, 40, 60 секунд
+                self._stop.wait(pause)
+                pause = min(pause * 2, 60)
                 continue
+            if self.down_since:
+                pause = 5
+                self._back_online()
             for upd in updates:
                 self._offset = upd["update_id"] + 1
                 message = upd.get("message")

@@ -140,6 +140,30 @@ def main():
     print(f"{'ok ' if ok else 'НЕТ'} напоминание во время ответа телефону: вслух и одно в чат, "
           f"в ответ не прилипло ({stolen or 'пусто'})")
 
+    # Связь с Telegram пропала (VPN выключен): напоминание не теряется, а уходит,
+    # когда связь вернулась, с честным временем. В журнал — по строке, а не 781
+    net = {"up": False}
+    delivered = []
+
+    def flaky(method, _wait=20, _files=None, **p):
+        if not net["up"]:
+            phone.last_error = "SSLError"
+            return None
+        delivered.append(p.get("text", ""))
+        return {"message_id": 1}
+    phone._call = flaky
+    phone._went_down()
+    j.notify("Напоминаю: ученик — 20:00.", {"id": 5, "text": "ученик"})
+    queued = len(phone._outbox) == 1 and not delivered
+    net["up"] = True
+    phone._back_online()
+    ok = (queued and not phone._outbox and phone.down_since == 0 and len(delivered) == 1
+          and delivered[0].startswith("Напоминаю: ученик — 20:00.") and "не дошло вовремя" in delivered[0])
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} без связи напоминание ждёт и уходит при связи: "
+          f"«{delivered[0].splitlines()[-1] if delivered else '—'}»")
+    phone._call = fake._call
+
     # 7. Закреплённая сводка: одно сообщение, правится на месте, только при изменениях
     from core import memory
     phone.pinned = True
