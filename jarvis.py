@@ -473,6 +473,33 @@ class Jarvis:
                                    "Простые команды — дела, видео, программы — работают и так.")
 
     # ---------- фоновые напоминания ----------
+    def _check_cloud_back(self):
+        """Живой режим выключен после сбоя — раз в минуту проверить, не вернулось ли облако.
+
+        09.10.2026: без VPN живой режим уходил в паузу на 10 минут, и включённый
+        потом VPN ещё столько же ничего не менял. Проверка — крошечный запрос без
+        инструментов и памяти (один токен ответа), только пока живой режим на паузе.
+        """
+        now = time.time()
+        if now >= self.live_off_until or now - getattr(self, "_cloud_checked", 0) < 60:
+            return
+        self._cloud_checked = now
+        cloud = getattr(self.brain, "cloud", self.brain)
+        if cloud is None or not getattr(cloud, "ready", False):
+            return
+        try:
+            cloud._post({"contents": [{"role": "user", "parts": [{"text": "1"}]}],
+                         "generationConfig": {"maxOutputTokens": 1}}, timeout=10)
+        except Exception:
+            return                               # всё ещё нет — проверим через минуту
+        self.live_off_until = 0.0
+        if hasattr(self.brain, "cloud_off_until"):
+            self.brain.cloud_off_until = 0.0
+        log.write("info", "облако снова доступно — живой режим включён")
+        if self._vpn_told:
+            self._vpn_told = 0.0
+            self.say("Умный режим снова со мной.", aloud=True)
+
     def _check_training_result(self):
         """Обучение в Colab закончилось — файл молча лёг в «Загрузки»: сказать об этом.
 
@@ -643,6 +670,7 @@ class Jarvis:
 
             self._check_disk()           # сам замолкает на шесть часов после предупреждения
             self._check_training_result()
+            self._check_cloud_back()
             time.sleep(10)
 
     # ---------- режимы ----------

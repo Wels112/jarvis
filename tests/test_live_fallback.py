@@ -81,6 +81,29 @@ def main():
     print(f"{'ok ' if ok else 'НЕТ'} разговор в комнате без имени — молчит; вопрос и обращение по имени — "
           f"отвечает: {asked}")
 
+    # VPN включили — живой режим возвращается сам, не ждёт 10 минут паузы
+    j._vpn_told = time.time()
+    j.live_off_until = time.time() + 600
+    cloud = getattr(j.brain, "cloud", j.brain)
+    pings = []
+
+    def blocked(payload, timeout=45):
+        pings.append(1)
+        raise RuntimeError("400: User location is not supported")
+    cloud._post = blocked
+    spoken.clear()
+    j._check_cloud_back()
+    still_off = j.live_off_until > time.time() and not spoken
+    j._check_cloud_back()                           # через секунду — не дёргает облако снова
+    rare = len(pings) == 1
+    cloud._post = lambda payload, timeout=45: pings.append(1) or {"candidates": []}
+    j._cloud_checked = 0
+    j._check_cloud_back()
+    back = j.live_off_until == 0 and spoken == ["Умный режим снова со мной."]
+    ok = still_off and rare and back
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} VPN включили — живой режим вернулся сам и сказал об этом: {spoken}")
+
     print(f"\nошибок: {errors}")
     return errors == 0
 
