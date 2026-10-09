@@ -27,14 +27,22 @@ def main():
         print("своей модели нет — проверять нечего")
         return False
 
-    # 1. Облако отвечает — своя модель не нужна, видеокарта не занимается
+    # 1. Облако отвечает — своя модель не нужна, видеокарта не занимается.
+    # Без VPN Gemini отвечает «User location is not supported» — это не поломка
+    # кода, а состояние сети: проверки живого облака (1 и 4) тогда пропускаются
     real_post = cloud._post
+    cloud.ask("скажи одним словом: да")
+    cloud_up = cloud.last_error is None
+    if not cloud_up:
+        print(f"-- пропуск проверок живого облака: оно недоступно ({str(cloud.last_error)[:50]}…) — "
+              "включи VPN и запусти ещё раз")
     brain._net_ok, brain._net_checked = True, time.time()
-    answer = brain.ask("скажи одним словом: два плюс два")
-    ok = brain.last_source == "облако" and brain.local._proc is None
-    errors += not ok
-    print(f"{'ok ' if ok else 'НЕТ'} облако живо: ответило «{answer[:40]}», "
-          f"своя модель не запускалась: {brain.local._proc is None}")
+    if cloud_up:
+        answer = brain.ask("скажи одним словом: два плюс два")
+        ok = brain.last_source == "облако" and brain.local._proc is None
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} облако живо: ответило «{answer[:40]}», "
+              f"своя модель не запускалась: {brain.local._proc is None}")
 
     # 2. Облако упало сетью — тот же вопрос подхватывает своя модель
     def broken(payload, timeout=45):
@@ -60,10 +68,11 @@ def main():
     # 4. Пауза прошла, облако вернулось — снова отвечает облако
     brain.cloud_off_until = 0
     brain._net_ok, brain._net_checked = True, time.time()
-    brain.ask("скажи одним словом: привет")
-    ok = brain.last_source == "облако"
-    errors += not ok
-    print(f"{'ok ' if ok else 'НЕТ'} облако вернулось — отвечает снова оно")
+    if cloud_up:
+        brain.ask("скажи одним словом: привет")
+        ok = brain.last_source == "облако"
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} облако вернулось — отвечает снова оно")
 
     # 5. Глухой интернет: проверка дороги не ждёт минутами
     brain._net_checked = 0

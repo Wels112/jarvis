@@ -20,7 +20,7 @@ import urllib3.util.connection as urllib3_conn
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core import config, memory
+from core import config, log, memory
 from skills import system as S
 from skills import desktop as D
 from skills import youtube as YT
@@ -34,6 +34,26 @@ from skills import lessons as LS
 urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
 
 API = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+
+
+def cloud_error_phrase(e) -> str:
+    """Что сказать вслух, когда облако не ответило, — по-человечески.
+
+    Раньше вслух шло «Мозг недоступен: 400: { "error": … "User location is not
+    supported" … }» — сырой ответ Google. Чаще всего это значит, что выключен
+    VPN: из России Gemini не пускает (проверка 09.10.2026).
+    """
+    text = str(e)
+    if "location is not supported" in text or "FAILED_PRECONDITION" in text:
+        return ("Умный режим недоступен: Google не пускает без VPN. Включи VPN — а простые команды "
+                "я выполняю и так.")
+    if "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():
+        return "Лимит запросов к Gemini на сейчас исчерпан — подожди минуту и спроси ещё раз."
+    if "403" in text or "API key" in text or "PERMISSION_DENIED" in text:
+        return "Ключ Gemini не подходит — проверь его в config\\.env."
+    if re.search(r"Timeout|Connection|SSLError|ProxyError|сеть", text):
+        return "Нет связи с умным режимом — похоже, пропал интернет или VPN. Простые команды работают."
+    return "Умный режим сейчас не ответил. Простые команды работают — попробуй ещё раз чуть позже."
 
 PERSONA = """Ты — Джарвис, личный ассистент. Говоришь по-русски, на «ты», если хозяин сам не перешёл на «вы».
 
@@ -174,7 +194,8 @@ class Brain:
                 # если сбой случился на втором витке. Иначе в истории останется
                 # вызов без ответа, и следующий запрос облако отвергнет как бессмыслицу
                 del self.history[turn_start:]
-                return f"Мозг недоступен: {e}"
+                log.write("error", f"[мозг] {str(e)[:160]}")
+                return cloud_error_phrase(e)
 
             cand = (data.get("candidates") or [{}])[0]
             content = cand.get("content", {})

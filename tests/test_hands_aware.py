@@ -48,7 +48,7 @@ def main():
             b = B.Brain(config.CFG)
             b._run_tool = lambda name, args: called.append((name, args)) or "Нажал «YouTube» в окне «Chrome»."
             answer = b.ask("Можешь моей мышкой нажать на YouTube?")
-            if answer.startswith("Мозг недоступен"):
+            if b.last_error is not None:          # облако не ответило (нет VPN, лимит)
                 continue
             tries += 1
             names = [n for n, _ in called]
