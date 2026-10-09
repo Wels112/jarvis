@@ -194,7 +194,8 @@ class Brain:
                 # если сбой случился на втором витке. Иначе в истории останется
                 # вызов без ответа, и следующий запрос облако отвергнет как бессмыслицу
                 del self.history[turn_start:]
-                log.write("error", f"[мозг] {str(e)[:160]}")
+                one_line = re.sub(r"\s+", " ", str(e))[:160]       # ответ Google многострочный
+                log.write("error", f"[мозг] {one_line}")
                 return cloud_error_phrase(e)
 
             cand = (data.get("candidates") or [{}])[0]

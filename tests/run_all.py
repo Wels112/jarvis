@@ -23,7 +23,7 @@ SUITES = [
     "test_hybrid_brain", "test_files", "test_search",
     "test_cleanup", "test_diskspace", "test_uninstall", "test_tg_desktop",
     "test_speakable", "test_wake_name", "test_reconnect", "test_voice_pipeline",
-    "test_single_instance", "test_update", "test_training",
+    "test_single_instance", "test_update", "test_training", "check_py310",
 ]
 WINDOWS = ["test_apps", "test_ui"]       # открывают и закрывают настоящие окна
 
