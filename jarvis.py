@@ -464,6 +464,31 @@ class Jarvis:
                                    "Простые команды — дела, видео, программы — работают и так.")
 
     # ---------- фоновые напоминания ----------
+    def _check_training_result(self):
+        """Обучение в Colab закончилось — файл молча лёг в «Загрузки»: сказать об этом.
+
+        Раз в минуту и только про файл, о котором ещё не говорили (по его имени и
+        времени): хозяин ждёт результата обучения часами, а браузер о нём молчит.
+        """
+        now = time.time()
+        if now - getattr(self, "_lora_checked", 0) < 60:
+            return
+        self._lora_checked = now
+        try:
+            sys.path.insert(0, str(config.ROOT))
+            from train.install_lora import find_download
+            src = find_download()
+            if not src or now - src.stat().st_mtime > 6 * 3600:
+                return
+            key = f"lora:{src.name}:{int(src.stat().st_mtime)}"
+            if _announced(key, 30 * 24 * 3600):
+                return
+            _mark_announced(key)
+        except Exception:
+            return
+        self.notify("Обучение закончилось: файл модели пришёл в «Загрузки». Скажи «подключи обученную "
+                    "модель» — сравню с исходной и подключу, если стала лучше.")
+
     def _check_disk(self):
         """Предупредить, если на системном диске почти не осталось места.
 
@@ -608,6 +633,7 @@ class Jarvis:
                 print(f"[уроки] {e}")
 
             self._check_disk()           # сам замолкает на шесть часов после предупреждения
+            self._check_training_result()
             time.sleep(10)
 
     # ---------- режимы ----------

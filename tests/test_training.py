@@ -70,6 +70,23 @@ def main():
         ok = said[-1].startswith("Обученную модель не подключил") and T.LOCAL.lora_path is None
         errors += not ok
         print(f"{'ok ' if ok else 'НЕТ'} не лучше — не подключил и сказал почему: «{said[-1][:90]}»")
+        # Файл обучения пришёл — Джарвис говорит сам и один раз
+        import tempfile
+        import types
+        import jarvis as J
+        tmp = Path(tempfile.mkdtemp())
+        f = tmp / "jarvis-lora.gguf"
+        f.write_bytes(b"gguf")
+        J.ANNOUNCED = tmp / "announced.json"
+        IL.find_download = lambda: f
+        told = []
+        stub = types.SimpleNamespace(notify=told.append)
+        J.Jarvis._check_training_result(stub)
+        stub._lora_checked = 0
+        J.Jarvis._check_training_result(stub)              # тот же файл — второй раз молчит
+        ok = len(told) == 1 and "подключи обученную модель" in told[0]
+        errors += not ok
+        print(f"{'ok ' if ok else 'НЕТ'} файл обучения пришёл — сказал один раз: «{told[0][:60] if told else '—'}»")
     finally:
         IL.find_download, T.subprocess.run = real
         T.NOTIFY = T.LOCAL = None
