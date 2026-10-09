@@ -293,7 +293,10 @@ class Jarvis:
         # становился «глупее» — пусть скажет почему, не чаще раза в полчаса
         if "location is not supported" in result.lower() and time.time() - self._vpn_told > 1800:
             self._vpn_told = time.time()
-            self.say("Gemini не пускает из этой страны — похоже, выключен VPN. Пока отвечаю сам, попроще.")
+            # «Похоже, выключен VPN» бывало неправдой: VPN включён, но сервер Google
+            # не принимает (09.10.2026). Где выход в интернет — по адресу
+            from skills import netcheck
+            self.say(netcheck.blocked_phrase(netcheck.exit_country()) + " Пока отвечаю сам, попроще.")
         if self.live.t_first_audio is not None:
             return True
         if audio is None:

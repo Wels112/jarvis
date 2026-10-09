@@ -208,6 +208,35 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} экран без зрения: «{said[:70]}…»")
 
+    # «Проверь связь»: VPN выключен — или включён, но сервер Google не принимает (09.10.2026)
+    from skills import netcheck as NC
+
+    class Cloud:
+        ready = True
+
+        def __init__(self, err=None):
+            self.err = err
+
+        def _post(self, payload, timeout=45):
+            if self.err:
+                raise RuntimeError(self.err)
+            return {}
+    real_exit = NC.exit_country
+    try:
+        NC.exit_country = lambda max_age=300: "DE"
+        de = NC.check(Cloud("400: User location is not supported for the API use."))
+        NC.exit_country = lambda max_age=300: "RU"
+        ru = NC.check(Cloud("400: User location is not supported for the API use."))
+        good = NC.check(Cloud())
+        quota = NC.check(Cloud("429 RESOURCE_EXHAUSTED"))
+        r = router.handle(router.normalize("что с впн"), config.CFG)
+    finally:
+        NC.exit_country = real_exit
+    ok = ("через Германию" in de and "другой сервер" in de and "выключен" in ru
+          and good.startswith("Связь в порядке") and "лимит" in quota and "ученика" not in r.say)
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} проверь связь: сервер не тот — «{de[:60]}…», VPN выключен — «{ru[:40]}…»")
+
     # «Сделай скриншот и пришли на телефон» — снимок уходит через бота
     import core.phone as phone_module
     shot = tmp / "jarvis_test.png"

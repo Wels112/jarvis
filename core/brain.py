@@ -45,8 +45,8 @@ def cloud_error_phrase(e) -> str:
     """
     text = str(e)
     if "location is not supported" in text or "FAILED_PRECONDITION" in text:
-        return ("Умный режим недоступен: Google не пускает без VPN. Включи VPN — а простые команды "
-                "я выполняю и так.")
+        from skills import netcheck
+        return f"Умный режим недоступен. {netcheck.blocked_phrase(netcheck.exit_country())} Простые команды работают и так."
     if "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():
         return "Лимит запросов к Gemini на сейчас исчерпан — подожди минуту и спроси ещё раз."
     if "403" in text or "API key" in text or "PERMISSION_DENIED" in text:

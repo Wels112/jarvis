@@ -405,6 +405,14 @@ def handle(text: str, cfg: dict) -> Reply:
                  r"какой сегодня день)", t):
         return Reply(say=S.what_time())
 
+    # --- почему не работает умный режим: VPN выключен или сервер не тот (skills/netcheck.py) ---
+    if re.search(r"^проверь\s+(?:связь|интернет|vpn|впн|умный режим|соединение)$|"
+                 r"^(?:работает ли|что с)\s+(?:умн\w+ режим\w*|интернет\w*|vpn|впн)$|"
+                 r"почему\s+(?:ты\s+)?(?:не работает умный режим|тупишь|глупый|отвечаешь попроще)", t):
+        from skills import netcheck
+        from core.brain import Brain
+        return Reply(say=netcheck.check(Brain(cfg)))
+
     # --- отложенная команда: «через полтора часа включи видео» ---
     # Выше видео: иначе правило видео включило бы его сразу, а не через полтора часа
     reply = _deferred(t)
