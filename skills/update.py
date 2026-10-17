@@ -34,10 +34,14 @@ KEEP_FILES = {"config/.env", "config/settings.json"}
 
 
 def _req_hash(root: Path) -> str:
+    # По именам пакетов, а не байтам: разные переводы строк (CRLF/LF после
+    # выгрузки с GitHub), порядок и комментарии не должны запускать переустановку
     try:
-        return hashlib.sha1((root / "requirements.txt").read_bytes()).hexdigest()
+        lines = (root / "requirements.txt").read_text(encoding="utf-8").splitlines()
     except OSError:
         return ""
+    pkgs = sorted(l.split("#")[0].strip().lower() for l in lines if l.split("#")[0].strip())
+    return hashlib.sha1("\n".join(pkgs).encode("utf-8")).hexdigest()
 
 
 def _installed() -> dict:
