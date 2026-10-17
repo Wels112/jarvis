@@ -37,8 +37,9 @@ DEFAULTS = {
         "max_phrase_s": 20,
     },
     "brain": {
-        "provider": "gemini",
-        "model": "gemini-2.0-flash",
+        "provider": "gemini",          # gemini | openai (любой OpenAI-совместимый провайдер)
+        "model": "gemini-3.5-flash-lite",
+        "base_url": "https://api.openai.com/v1",   # для provider=openai: адрес провайдера
         "max_history": 20,
     },
     "safety": {

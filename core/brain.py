@@ -48,9 +48,9 @@ def cloud_error_phrase(e) -> str:
         from skills import netcheck
         return f"Умный режим недоступен. {netcheck.blocked_phrase(netcheck.exit_country())} Простые команды работают и так."
     if "429" in text or "RESOURCE_EXHAUSTED" in text or "quota" in text.lower():
-        return "Лимит запросов к Gemini на сейчас исчерпан — подожди минуту и спроси ещё раз."
-    if "403" in text or "API key" in text or "PERMISSION_DENIED" in text:
-        return "Ключ Gemini не подходит — проверь его в config\\.env."
+        return "Лимит запросов к умному режиму на сейчас исчерпан — подожди минуту и спроси ещё раз."
+    if "403" in text or "API key" in text or "PERMISSION_DENIED" in text or "401" in text:
+        return "Ключ умного режима не подходит — проверь его в config\\.env."
     if re.search(r"Timeout|Connection|SSLError|ProxyError|сеть", text):
         return "Нет связи с умным режимом — похоже, пропал интернет или VPN. Простые команды работают."
     return "Умный режим сейчас не ответил. Простые команды работают — попробуй ещё раз чуть позже."
@@ -276,8 +276,31 @@ class Brain:
             while self.history and not plain_user(self.history[0]):
                 del self.history[0]
 
+    def vision(self, prompt: str, image_b64: str) -> str:
+        """Рассмотреть картинку (скриншот) — формат Gemini."""
+        payload = {
+            "contents": [{"role": "user", "parts": [
+                {"text": prompt},
+                {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}},
+            ]}],
+            "generationConfig": {"temperature": 0.2, "maxOutputTokens": 200},
+        }
+        d = self._post(payload)
+        return " ".join(p.get("text", "") for p in
+                        d["candidates"][0]["content"]["parts"]).strip()
+
     def reset(self):
         self.history = []
+
+
+def make_cloud_brain(cfg: dict):
+    """Облачный мозг по настройке brain.provider: Gemini (по умолчанию) или любой
+    OpenAI-совместимый провайдер. Так заказчик вписывает ключ под свою нейросеть."""
+    provider = str(cfg.get("brain", {}).get("provider", "gemini")).lower()
+    if provider in ("openai", "custom", "proxy", "deepseek", "gigachat", "openrouter"):
+        from core.openai_brain import OpenAIBrain
+        return OpenAIBrain(cfg)
+    return Brain(cfg)
 
 
 # ================= реализация инструментов =================
@@ -379,17 +402,9 @@ def _t_look_at_screen(b, question: str = "Что на экране?"):
     buf = io.BytesIO()
     img.save(buf, "JPEG", quality=80)
     data = base64.b64encode(buf.getvalue()).decode()
-    payload = {
-        "contents": [{"role": "user", "parts": [
-            {"text": "Опиши кратко и по делу, одним-двумя предложениями: " + question},
-            {"inline_data": {"mime_type": "image/jpeg", "data": data}},
-        ]}],
-        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 200},
-    }
     try:
-        d = b._post(payload)
-        return " ".join(p.get("text", "") for p in
-                        d["candidates"][0]["content"]["parts"]).strip()
+        # Формат запроса зависит от провайдера (Gemini / OpenAI) — он и собирает его
+        return b.vision("Опиши кратко и по делу, одним-двумя предложениями: " + question, data)
     except Exception as e:
         # Без облака (нет VPN) картинку не рассмотреть — но что открыто и что
         # написано в окне, видно и так. 09.10.2026 вместо этого звучало
