@@ -187,6 +187,9 @@ if (-not $NoShortcut) {
     $sc.WorkingDirectory = $root
     $sc.Save()
     Готово "ярлык на рабочем столе: Джарвис"
+    # Планировщик недели — своё окно, работает и без запущенного Джарвиса
+    & $py -c "import sys; sys.path.insert(0, r'$root'); from skills import planner; planner.make_shortcut()" 2>$null
+    if ($LASTEXITCODE -eq 0) { Готово "ярлык на рабочем столе: Планировщик" }
 }
 
 Write-Host "`nГотово. Запусти ярлык и скажи «Джарвис, привет»." -ForegroundColor Green

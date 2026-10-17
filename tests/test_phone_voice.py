@@ -32,7 +32,15 @@ def make_ogg(text: str) -> bytes:
                 out.extend(chunk["data"])
         return bytes(out)
 
-    mp3 = asyncio.run(fetch())
+    # Сервис Microsoft через раз отвечает «No audio was received» — как и голос
+    # Джарвиса (core/voice.py), пробуем до трёх раз
+    for attempt in range(3):
+        try:
+            mp3 = asyncio.run(fetch())
+            break
+        except Exception:
+            if attempt == 2:
+                raise
     with av.open(io.BytesIO(mp3)) as c:
         st = c.streams.audio[0]
         rate = st.rate

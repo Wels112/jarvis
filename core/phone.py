@@ -491,6 +491,11 @@ class Phone:
                     items.append((it["at"], f"урок с {lessons.decline(it['name'], 'тв')}{subject}"))
         except Exception:
             pass
+        try:
+            from skills import planner                  # неделя из планировщика
+            items += [(at, text) for at, text in planner.day_items(now.date()) if at >= now]
+        except Exception:
+            pass
         items.sort(key=lambda x: x[0])
         return [f"• {at:%H:%M} — {text}" for at, text in items]
 

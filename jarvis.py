@@ -671,15 +671,35 @@ class Jarvis:
             except Exception as e:
                 print(f"[уроки] {e}")
 
+            try:
+                # События недели с колокольчиком — за 10 минут (skills/planner.py)
+                from skills import planner
+                self._planner_told = getattr(self, "_planner_told", set())
+                for ev, left in planner.due_reminders(told=self._planner_told):
+                    when = "сейчас" if left <= 0 else f"через {left} мин"
+                    self.notify(f"По плану {when}: {ev['title']} ({ev['start']}–{ev['end']}).")
+            except Exception as e:
+                print(f"[планировщик] {e}")
+
             self._check_disk()           # сам замолкает на шесть часов после предупреждения
             self._check_training_result()
             self._check_cloud_back()
             time.sleep(10)
 
     # ---------- режимы ----------
+    def _init_planner(self):
+        """Окно планировщика недели (skills/planner.py) — сервер на этом компьютере.
+        Порт занят — значит, планировщик уже открыт отдельно: работаем с тем же файлом."""
+        try:
+            from skills import planner
+            self._planner = planner.serve(int(self.cfg.get("planner", {}).get("port", planner.PORT)))
+        except Exception as e:
+            print(f"[планировщик] не поднялся: {e}")
+
     def run_text(self):
         print(BANNER)
         print("Текстовый режим. Пиши команды, «выход» — закончить.\n")
+        self._init_planner()
         self.say("Джарвис на связи.")
         threading.Thread(target=self._reminder_loop, daemon=True).start()
         while self.running:
@@ -716,6 +736,7 @@ class Jarvis:
         print("Ctrl+Alt+J — позвать молча · Ctrl+Alt+S — замолчать · Ctrl+Alt+P — пауза")
         print("Ctrl+C — выход\n")
         self._init_phone()
+        self._init_planner()
         self.say(f"{name} на связи. Слушаю.")
         if getattr(self, "_pair_hint", ""):
             self.say(self._pair_hint)

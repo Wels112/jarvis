@@ -159,6 +159,31 @@ def _open_target(target: str, site: bool = False) -> str:
     return S.open_app(target)
 
 
+def _planner_rules(t: str, cfg: dict):
+    """Неделя из планировщика: открыть окно, спросить, добавить голосом."""
+    from skills import planner as PL
+    if re.search(r"^(?:открой|покажи|запусти)\s+(?:мой\s+)?(?:планировщик\w*|недельн\w+ план\w*|"
+                 r"расписание недели|план на неделю)$", t):
+        port = int(cfg.get("planner", {}).get("port", PL.PORT))
+        if not PL.running(port):
+            PL.serve(port)                       # Джарвис без окна — поднять сервер сейчас
+        return Reply(say=PL.open_window(port))
+    m = re.search(r"^(?:добавь|запиши|поставь|внеси)\s+(?:в|на)\s+(?:планировщик\w*|недел\w+|"
+                  r"расписание недели)\s+(.+)$", t)
+    if m:
+        return Reply(say=PL.add_by_voice(m.group(1)))
+    if re.search(r"(?:что|какие)\s+(?:у меня\s+)?(?:сейчас|дальше|следующ\w+)\s+(?:по\s+)?(?:план\w*|"
+                 r"планировщик\w*|расписани\w*)|^что дальше по план\w*", t):
+        return Reply(say=PL.now_and_next())
+    m = re.search(r"(?:по\s+(?:плану|планировщику)|в\s+планировщике)\b.*?\b(?:в|во)\s+"
+                  r"(понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье)", t) or \
+        re.search(r"(?:в|во)\s+(понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье)\b.*"
+                  r"(?:по\s+(?:плану|планировщику)|в\s+планировщике)", t)
+    if m:
+        return Reply(say=PL.plan_for(PL.DAYS_ACC.index(m.group(1))))
+    return None
+
+
 def _split_commands(t: str):
     """«Включи музыку на ютубе и сделай погромче» → две команды.
 
@@ -404,6 +429,11 @@ def handle(text: str, cfg: dict) -> Reply:
     if re.search(r"(который (сейчас )?час|сколько (сейчас )?времени|какое (сегодня )?число|"
                  r"какой сегодня день)", t):
         return Reply(say=S.what_time())
+
+    # --- планировщик недели (skills/planner.py) ---
+    reply = _planner_rules(t, cfg)
+    if reply:
+        return reply
 
     # --- почему не работает умный режим: VPN выключен или сервер не тот (skills/netcheck.py) ---
     if re.search(r"^проверь\s+(?:связь|интернет|vpn|впн|умный режим|соединение)$|"

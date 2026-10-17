@@ -417,6 +417,11 @@ def list_tasks(when: str = "today") -> str:
         day = now.date() if when == "today" else (now + timedelta(days=1)).date()
         items = [(at(t), t["text"]) for t in tasks if t["when"] and at(t).date() == day]
         items += _lessons_on(day)
+        try:
+            from skills import planner                  # неделя из планировщика — каждую неделю та же
+            items += planner.day_items(day)
+        except Exception:
+            pass
         label = "На сегодня" if when == "today" else "На завтра"
     elif when == "week":
         end = now + timedelta(days=7)
