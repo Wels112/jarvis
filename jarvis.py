@@ -283,6 +283,10 @@ class Jarvis:
         print(f"🎙 разговор закрыт ({result})\n")
 
         if not result.startswith("error"):
+            # Хозяин просил (17.10.2026): закрылся разговор — сказать об этом, чтобы
+            # было понятно, что дальше без имени Джарвис не слушает
+            if result in ("stopped", "goodbye", "idle"):
+                self.say("Сессия закончена.", aloud=True)
             return result != "shutdown"
 
         # Страховка: сервер не ответил или кончился лимит. Если модель так ничего и
@@ -390,6 +394,8 @@ class Jarvis:
         if reply.stop_speech:
             self.voice.stop()
             self.awake_until = 0
+            if from_voice:                       # голосом — сказать, что больше не слушает
+                self.say("Сессия закончена.")
             return True
         if reply.quit:
             self.say(reply.say)

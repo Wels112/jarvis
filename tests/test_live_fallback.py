@@ -104,6 +104,19 @@ def main():
     errors += not ok
     print(f"{'ok ' if ok else 'НЕТ'} VPN включили — живой режим вернулся сам и сказал об этом: {spoken}")
 
+    # «Джарвис, стоп» — разговор закрыт, и об этом сказано (просьба 17.10.2026)
+    from core.live import STOP_WORDS
+    told = []
+    for result in ("stopped", "idle", "goodbye", "paused"):
+        spoken.clear()
+        j.live = Live(result)
+        j._converse(audio=None)
+        told.append("Сессия закончена." in spoken)
+    words = [bool(STOP_WORDS.fullmatch(t)) for t in ("стоп", "джарвис, стоп.", "хватит", "стоп, включи музыку")]
+    ok = told == [True, True, True, False] and words == [True, True, True, False]
+    errors += not ok
+    print(f"{'ok ' if ok else 'НЕТ'} «стоп» закрывает разговор и звучит «Сессия закончена»: {told} {words}")
+
     print(f"\nошибок: {errors}")
     return errors == 0
 

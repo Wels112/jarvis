@@ -50,6 +50,10 @@ YES = re.compile(r"\b(да|давай|подтверждаю|выполняй|к
 NO = re.compile(r"\b(нет|не надо|не нужно|не делай|отмена|отмени|передумал"
                 r"|no|nope|don't|cancel)\b", re.I)
 
+# Закрыть разговор голосом. Фраза целиком — «стоп» внутри «стоп-кран» не считается
+STOP_WORDS = re.compile(r"(?:(?:джарвис|джарус|jarvis)\W*)?(?:стоп|хватит|отбой|конец связи|"
+                        r"заверши разговор|закончили|стоп сессия)\W*", re.I)
+
 WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"]
 MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля",
           "августа", "сентября", "октября", "ноября", "декабря"]
@@ -493,6 +497,7 @@ class LiveConversation:
     def _reset(self):
         self._stop.clear()
         self.ending = False
+        self.stopped_by_word = False
         self.user_turn = ""
         self.said_turn = ""
         self.turn_failures = []              # отказы инструментов в текущем ходе — для сторожа честности
@@ -673,6 +678,13 @@ class LiveConversation:
                 if sc.input_transcription and sc.input_transcription.text:
                     text = sc.input_transcription.text
                     self.user_turn += text
+                    # «Джарвис, стоп» — закрыть разговор сразу, не дожидаясь модели
+                    # (она могла просто замолчать, и было непонятно, слушает ли ещё)
+                    if STOP_WORDS.fullmatch(self.user_turn.strip().lower()):
+                        self._player.clear()
+                        self.stopped_by_word = True
+                        self._stop.set()
+                        return "stopped"
                     self.last_user_at = time.monotonic()
                     if self.pending_since is not None:
                         self.heard_since_pending += text
