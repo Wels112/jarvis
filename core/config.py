@@ -118,6 +118,23 @@ def env(key: str, default: str = "") -> str:
     return default
 
 
+def set_env(key: str, value: str) -> None:
+    """Вписать ключ в config/.env, не трогая остальные строки. Нет строки — добавить."""
+    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    lines = ENV_FILE.read_text(encoding="utf-8-sig").splitlines() if ENV_FILE.exists() else []
+    found = False
+    for i, line in enumerate(lines):
+        if line.strip().startswith("#") or "=" not in line:
+            continue
+        if line.split("=", 1)[0].strip() == key:
+            lines[i] = f"{key}={value}"
+            found = True
+            break
+    if not found:
+        lines.append(f"{key}={value}")
+    ENV_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def setup_console():
     """Windows-консоль по умолчанию не UTF-8 — русский превращается в кашу.
 

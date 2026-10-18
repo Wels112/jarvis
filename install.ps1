@@ -190,6 +190,13 @@ if (-not $NoShortcut) {
     # Планировщик недели — своё окно, работает и без запущенного Джарвиса
     & $py -c "import sys; sys.path.insert(0, r'$root'); from skills import planner; planner.make_shortcut()" 2>$null
     if ($LASTEXITCODE -eq 0) { Готово "ярлык на рабочем столе: Планировщик" }
+    # Настройка умного режима (выбор нейросети) — двойным кликом, без правки файлов
+    $desk = [Environment]::GetFolderPath('Desktop')
+    $sc2 = $shell.CreateShortcut("$desk\Настройка умного режима.lnk")
+    $sc2.TargetPath = "$root\настройка мозга.bat"
+    $sc2.WorkingDirectory = $root
+    $sc2.Save()
+    Готово "ярлык на рабочем столе: Настройка умного режима"
 }
 
 Write-Host "`nГотово. Запусти ярлык и скажи «Джарвис, привет»." -ForegroundColor Green

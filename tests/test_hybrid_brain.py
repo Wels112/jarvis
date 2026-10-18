@@ -26,6 +26,16 @@ def main():
     if not brain.local.available:
         print("своей модели нет — проверять нечего")
         return False
+    # Видеокарту и порт 8090 может держать запущенный Джарвис: тогда своя модель
+    # не поднимется за отведённое время. Это не поломка — пропускаем с пояснением
+    import socket
+    with socket.socket() as s:
+        s.settimeout(0.5)
+        busy = s.connect_ex(("127.0.0.1", brain.local.port)) == 0
+    if busy and not brain.local._healthy():
+        print(f"-- пропуск: порт {brain.local.port} занят (похоже, Джарвис запущен и держит свою "
+              "модель). Закрой Джарвиса и запусти тест снова.")
+        return True
 
     # 1. Облако отвечает — своя модель не нужна, видеокарта не занимается.
     # Без VPN Gemini отвечает «User location is not supported» — это не поломка

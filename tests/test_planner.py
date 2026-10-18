@@ -15,7 +15,22 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from core import config, memory, router
 
-PORT = 8799
+def _free_port():
+    """Свободный порт: фиксированный 8799 иногда занят (другой сервер) — тогда любой свободный."""
+    import socket
+    for p in (8799, 0):
+        try:
+            s = socket.socket()
+            s.bind(("127.0.0.1", p))
+            port = s.getsockname()[1]
+            s.close()
+            return port
+        except OSError:
+            continue
+    return 8799
+
+
+PORT = _free_port()
 
 
 def req(method, url, body=None, headers=None):
