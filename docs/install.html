@@ -211,7 +211,7 @@
         <p class="note">Нет файла «Установить Джарвиса»? Тогда откройте «Пуск», наберите
           <b>PowerShell</b>, откройте его, вставьте строку ниже и нажмите <kbd>Enter</kbd>:</p>
         <div class="cmd">
-          <code id="install-cmd">irm https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1 | iex</code>
+          <code id="install-cmd">powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; iwr -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t; & $t"</code>
           <button type="button" id="copy-btn">Копировать</button>
         </div>
       </div></li>

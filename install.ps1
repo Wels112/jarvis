@@ -1,6 +1,9 @@
-﻿# Установщик Джарвиса. Запуск одной строкой в PowerShell:
+﻿# Установщик Джарвиса. Проще всего — двойным щелчком по «Установить Джарвиса.bat».
+# Вручную одной строкой в PowerShell (скачиваем в файл и запускаем как файл —
+# тогда работает param() и нет красных «косметических» ошибок, которые даёт
+# запуск через `irm | iex`):
 #
-#   irm https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1 | iex
+#   powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; iwr -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t; & $t"
 #
 # Что делает: находит настоящий Python, кладёт проект и окружение на диск с
 # местом, ставит зависимости, скачивает модель распознавания, спрашивает ключи
@@ -22,7 +25,11 @@ param(
     [switch]$LocalBrain       # без вопросов поставить и свою модель (1,4 ГБ)
 )
 
-$ErrorActionPreference = 'Stop'
+# «Stop» включаем ПОСЛЕ поиска Python: при поиске команды `py -3.12` без
+# установленного Python пишет ошибку в stderr, и со «Stop» в PowerShell 5.1 она
+# становится фатальной — скрипт обрывался до сообщения «поставьте Python»
+# (жалоба заказчика 19.10.2026). До проверки держим мягкий режим.
+$ErrorActionPreference = 'Continue'
 # Без полос прогресса: при проверке 05.10.2026 Expand-Archive залил ими весь
 # экран, и собственные сообщения установщика потерялись. Побочная польза —
 # Invoke-WebRequest без полосы качает заметно быстрее.
@@ -54,16 +61,25 @@ $python = $null
 foreach ($try in @('py -3.12', 'py -3.11', 'py -3.10', 'py -3')) {
     $exe, $arg = $try.Split(' ', 2)
     if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
-    $v = & $exe $arg -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null
-    if ($v -match '^3\.(1[0-3])$') { $python = $try; break }
+    # `py` без нужного рантайма пишет ошибку в stderr — глушим её и не роняем
+    # установщик (ErrorActionPreference тут мягкий). Берём первую строку — версию
+    $v = $null
+    try { $v = (& $exe $arg -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null | Select-Object -First 1) }
+    catch { $v = $null }
+    if ("$v".Trim() -match '^3\.(1[0-3])$') { $python = $try; break }
 }
 if (-not $python) {
-    Беда 'Нужен Python 3.10-3.13. Поставь с python.org (галочку "Add to PATH" можно не ставить),'
-    Беда 'потом запусти установщик снова.'
-    Start-Process 'https://www.python.org/downloads/windows/'
+    Беда 'Нужен Python — на этом компьютере его нет.'
+    Беда '1. Откроется сайт python.org. Нажмите жёлтую кнопку Download Python.'
+    Беда '2. Запустите скачанный файл и нажмите Install Now, дождитесь Setup was successful.'
+    Беда '3. Снова запустите установку Джарвиса.'
+    Start-Sleep -Seconds 2
+    try { Start-Process 'https://www.python.org/downloads/' } catch { }
     return
 }
 Готово "нашёл: $python"
+# Теперь ошибки должны останавливать установку — дальше каждый сбой важен
+$ErrorActionPreference = 'Stop'
 
 # --- 2. Куда ставить -------------------------------------------------------
 Шаг 'Выбираю диск'

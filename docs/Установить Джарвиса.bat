@@ -5,12 +5,14 @@ echo.
 echo   Сейчас начнётся установка голосового помощника Джарвиса.
 echo   Это займёт около 15 минут. Понадобится интернет.
 echo.
+echo   ВАЖНО: сначала должен быть установлен Python (см. инструкцию, шаг 1).
 echo   Если Windows спросит разрешение — нажмите "Да".
 echo.
 pause
-powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1 | iex"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; try { Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t } catch { Write-Host '    Не удалось скачать установщик — проверьте интернет.' -ForegroundColor Yellow; exit 1 }; & $t; Remove-Item $t -Force -ErrorAction SilentlyContinue"
 echo.
 echo   Если выше написано "Готово" — установка завершена.
-echo   На рабочем столе появились ярлыки "Джарвис" и "Планировщик".
+echo   На рабочем столе появились ярлыки "Джарвис", "Планировщик"
+echo   и "Настройка умного режима".
 echo.
 pause
