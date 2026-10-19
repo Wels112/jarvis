@@ -3,7 +3,11 @@
 # тогда работает param() и нет красных «косметических» ошибок, которые даёт
 # запуск через `irm | iex`):
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; iwr -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t; & $t"
+#   powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; iwr -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t; & $t -Simple"
+#
+# -Simple — режим «одна кнопка» для заказчика: не спрашивает ни диск, ни Gemini,
+# ни имя, ни свою модель; только токен бота. Умный режим включается потом ключом
+# прямо в Telegram (сообщение «ключ …»). Без -Simple — полный диалог установки.
 #
 # Что делает: находит настоящий Python, кладёт проект и окружение на диск с
 # местом, ставит зависимости, скачивает модель распознавания, спрашивает ключи
@@ -22,7 +26,8 @@ param(
     [string]$BotToken,
     [string]$OwnerName,
     [switch]$NoShortcut,      # не класть ярлык на рабочий стол
-    [switch]$LocalBrain       # без вопросов поставить и свою модель (1,4 ГБ)
+    [switch]$LocalBrain,      # без вопросов поставить и свою модель (1,4 ГБ)
+    [switch]$Simple           # «одна кнопка»: ничего не спрашиваем, кроме токена бота
 )
 
 # «Stop» включаем ПОСЛЕ поиска Python: при поиске команды `py -3.12` без
@@ -54,30 +59,79 @@ Write-Host @'
 '@ -ForegroundColor White
 
 # --- 1. Python -------------------------------------------------------------
-# «python» на PATH часто оказывается заглушкой из Microsoft Store: она ничего
-# не делает и возвращает пустоту. Поэтому ищем через py и проверяем версию.
-Шаг 'Ищу Python'
-$python = $null
-foreach ($try in @('py -3.12', 'py -3.11', 'py -3.10', 'py -3')) {
-    $exe, $arg = $try.Split(' ', 2)
-    if (-not (Get-Command $exe -ErrorAction SilentlyContinue)) { continue }
-    # `py` без нужного рантайма пишет ошибку в stderr — глушим её и не роняем
-    # установщик (ErrorActionPreference тут мягкий). Берём первую строку — версию
-    $v = $null
-    try { $v = (& $exe $arg -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null | Select-Object -First 1) }
-    catch { $v = $null }
-    if ("$v".Trim() -match '^3\.(1[0-3])$') { $python = $try; break }
+# Заказчик (видео 19.10.2026) на python.org скачал «Python Install Manager» —
+# тот ставит только команду `py`, но САМ рантайм не устанавливает, отсюда
+# «No runtime installed that matches 3.12». Чтобы человек вообще не ходил на
+# сайт и ничего не выбирал, установщик сам молча ставит Python, если его нет.
+#
+# Find-Python возвращает @(exe, arg): для лаунчера @('py','-3.12'), для прямого
+# пути @('C:\...\python.exe', $null). Путь может содержать пробелы, поэтому
+# храним части отдельно, а не одной строкой.
+$PY_VER = '3.12.10'   # ставим именно 3.12: под неё есть готовые пакеты (у 3.15 ещё нет)
+
+function Find-Python {
+    foreach ($try in @('py -3.12', 'py -3.11', 'py -3.10', 'py -3')) {
+        $e, $a = $try.Split(' ', 2)
+        if (-not (Get-Command $e -ErrorAction SilentlyContinue)) { continue }
+        $v = $null
+        try { $v = (& $e $a -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null | Select-Object -First 1) } catch { }
+        if ("$v".Trim() -match '^3\.(1[0-3])$') { return @($e, $a) }
+    }
+    # Прямой поиск python.exe: после тихой установки PATH в этом окне ещё старый.
+    foreach ($dir in @("$env:LOCALAPPDATA\Programs\Python", "$env:ProgramFiles\Python", "${env:ProgramFiles(x86)}\Python")) {
+        if (-not (Test-Path $dir)) { continue }
+        foreach ($exe in (Get-ChildItem $dir -Recurse -Filter python.exe -ErrorAction SilentlyContinue | Select-Object -First 8)) {
+            $v = $null
+            try { $v = (& $exe.FullName -c "import sys; print('%d.%d' % sys.version_info[:2])" 2>$null | Select-Object -First 1) } catch { }
+            if ("$v".Trim() -match '^3\.(1[0-3])$') { return @($exe.FullName, $null) }
+        }
+    }
+    return $null
 }
-if (-not $python) {
-    Беда 'Нужен Python — на этом компьютере его нет.'
-    Беда '1. Откроется сайт python.org. Нажмите жёлтую кнопку Download Python.'
-    Беда '2. Запустите скачанный файл и нажмите Install Now, дождитесь Setup was successful.'
-    Беда '3. Снова запустите установку Джарвиса.'
+
+function Install-Python {
+    # 1. Официальный тихий установщик python.org — надёжнее всего, без вопросов.
+    $url = "https://www.python.org/ftp/python/$PY_VER/python-$PY_VER-amd64.exe"
+    $tmp = Join-Path $env:TEMP "python-$PY_VER-amd64.exe"
+    try {
+        Беда "Скачиваю Python $PY_VER…"
+        Invoke-WebRequest -UseBasicParsing $url -OutFile $tmp
+        Беда 'Устанавливаю Python (тихо, пара минут). Если Windows спросит — нажмите «Да».'
+        # Для одного пользователя (InstallAllUsers=0) — без запроса прав администратора.
+        Start-Process $tmp -ArgumentList '/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1', 'Include_pip=1', 'Include_test=0' -Wait | Out-Null
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+        if (Find-Python) { return $true }
+    } catch { Беда "Скачать установщик Python не вышло: $($_.Exception.Message)" }
+    # 2. Если уже стоит новый менеджер py — догрузим рантайм через него.
+    if (Get-Command py -ErrorAction SilentlyContinue) {
+        try { Беда 'Догружаю Python через менеджер…'; & py install $PY_VER 2>$null | Out-Null } catch { }
+        if (Find-Python) { return $true }
+    }
+    # 3. Запасной путь — winget.
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        try { Беда 'Ставлю Python через winget…'; & winget install -e --id Python.Python.3.12 --scope user --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null } catch { }
+        if (Find-Python) { return $true }
+    }
+    return $false
+}
+
+Шаг 'Проверяю Python'
+$found = Find-Python
+if (-not $found) {
+    Шаг 'Python не найден — ставлю сам, ничего нажимать не нужно'
+    if (Install-Python) { $found = Find-Python }
+}
+if (-not $found) {
+    Беда 'Не удалось поставить Python автоматически (нет интернета или нет прав).'
+    Беда 'Поставьте вручную: на открывшемся сайте — жёлтая кнопка, затем Install Now,'
+    Беда 'после «Setup was successful» снова запустите установку Джарвиса.'
     Start-Sleep -Seconds 2
     try { Start-Process 'https://www.python.org/downloads/' } catch { }
     return
 }
-Готово "нашёл: $python"
+$PyExe, $PyArg = $found
+$python = if ($PyArg) { "$PyExe $PyArg" } else { $PyExe }
+Готово "Python готов: $python"
 # Теперь ошибки должны останавливать установку — дальше каждый сбой важен
 $ErrorActionPreference = 'Stop'
 
@@ -89,7 +143,7 @@ if (-not $disks) { Беда 'Нужно хотя бы 6 ГБ свободног�
 $best = $disks[0].Name
 foreach ($d in $disks) { Write-Host ("    {0}: свободно {1:N0} ГБ" -f $d.Name, ($d.Free / 1GB)) }
 if ($Root) { $root = $Root }
-elseif ($Unattended) { $root = "${best}:\jarvis" }
+elseif ($Unattended -or $Simple) { $root = "${best}:\jarvis" }
 else {
     $answer = Read-Host "    Куда поставить? [${best}:\jarvis]"
     $root = if ($answer) { $answer } else { "${best}:\jarvis" }
@@ -121,8 +175,7 @@ try {
 
 # --- 4. Окружение ----------------------------------------------------------
 Шаг 'Собираю окружение (несколько минут)'
-$exe, $arg = $python.Split(' ', 2)
-& $exe $arg -m venv "$root\.venv"
+if ($PyArg) { & $PyExe $PyArg -m venv "$root\.venv" } else { & $PyExe -m venv "$root\.venv" }
 $py = "$root\.venv\Scripts\python.exe"
 # --no-cache-dir: кэш pip разрастается на гигабайты, а диск C: обычно забит
 & $py -m pip install --upgrade pip --quiet --no-cache-dir
@@ -137,24 +190,44 @@ if (-not (Test-Path $envFile)) { Copy-Item "$root\config\.env.example" $envFile 
 if (-not (Test-Path "$root\config\settings.json")) {
     Copy-Item "$root\config\settings.example.json" "$root\config\settings.json"
 }
-Write-Host '    Ключ Gemini бесплатный: aistudio.google.com/apikey'
-Write-Host '    Без него работают только простые команды (время, громкость, программы).'
-$key = if ($Unattended) { $GeminiKey } else { Read-Host '    Вставь ключ Gemini (Enter — пропустить)' }
-if ($key) {
-    Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'GEMINI_API_KEY=.*', "GEMINI_API_KEY=$key")
-    Готово 'ключ записан'
+if ($Simple) {
+    # «Одна кнопка»: умный режим (ключ) настраивается потом прямо в Telegram —
+    # сообщением «ключ …», Джарвис сам его подхватит. Здесь спрашиваем только
+    # токен бота: без него телефон не подключить, а узнать его за человека нельзя.
+    Write-Host ''
+    Write-Host '    Осталось одно: подключить телефон. Нужен бесплатный бот Telegram.' -ForegroundColor White
+    Write-Host '      1. В Telegram напишите @BotFather команду  /newbot'
+    Write-Host '      2. Придумайте имя и адрес (адрес заканчивается на bot)'
+    Write-Host '      3. BotFather пришлёт токен вида 123456789:AAH... — скопируйте его'
+    Write-Host ''
+    $bot = Read-Host '    Вставьте токен бота (правой кнопкой мыши — Вставить). Enter — пропустить и добавить позже'
+    if ($bot) {
+        Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot")
+        Готово 'токен записан: при запуске Джарвис назовёт код из шести цифр — отправьте его боту'
+    } else {
+        Беда 'без токена телефон пока не подключится — токен можно вписать позже в config\.env'
+    }
 }
-Write-Host '    Чтобы управлять с телефона, нужен бот: напиши @BotFather команду /newbot'
-$bot = if ($Unattended) { $BotToken } else { Read-Host '    Вставь токен бота (Enter — пропустить)' }
-if ($bot) {
-    Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot")
-    Готово 'токен записан: при запуске Джарвис назовёт код из шести цифр — отправь его боту'
-}
-$name = if ($Unattended) { $OwnerName } else { Read-Host '    Как к тебе обращаться? [хозяин]' }
-if ($name) {
-    $s = Get-Content "$root\config\settings.json" -Raw | ConvertFrom-Json
-    $s.owner = $name
-    Save-Utf8 "$root\config\settings.json" ($s | ConvertTo-Json -Depth 9)
+else {
+    Write-Host '    Ключ Gemini бесплатный: aistudio.google.com/apikey'
+    Write-Host '    Без него работают только простые команды (время, громкость, программы).'
+    $key = if ($Unattended) { $GeminiKey } else { Read-Host '    Вставь ключ Gemini (Enter — пропустить)' }
+    if ($key) {
+        Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'GEMINI_API_KEY=.*', "GEMINI_API_KEY=$key")
+        Готово 'ключ записан'
+    }
+    Write-Host '    Чтобы управлять с телефона, нужен бот: напиши @BotFather команду /newbot'
+    $bot = if ($Unattended) { $BotToken } else { Read-Host '    Вставь токен бота (Enter — пропустить)' }
+    if ($bot) {
+        Save-Utf8 $envFile ((Get-Content $envFile -Raw) -replace 'TELEGRAM_BOT_TOKEN=.*', "TELEGRAM_BOT_TOKEN=$bot")
+        Готово 'токен записан: при запуске Джарвис назовёт код из шести цифр — отправь его боту'
+    }
+    $name = if ($Unattended) { $OwnerName } else { Read-Host '    Как к тебе обращаться? [хозяин]' }
+    if ($name) {
+        $s = Get-Content "$root\config\settings.json" -Raw | ConvertFrom-Json
+        $s.owner = $name
+        Save-Utf8 "$root\config\settings.json" ($s | ConvertTo-Json -Depth 9)
+    }
 }
 
 # --- 6. Модель распознавания ----------------------------------------------
@@ -179,15 +252,19 @@ for size in ('tiny', 'small'):
 Готово 'модель на месте'
 
 # --- 6б. Свой мозг: работать без интернета ---------------------------------
-Шаг 'Свой мозг для работы без интернета'
-Write-Host '    Когда пропадает интернет или кончается бесплатный лимит Gemini, Джарвис'
-Write-Host '    продолжает выполнять команды своей моделью на видеокарте. Это 1,4 ГБ.'
-$wantLocal = if ($Unattended) { $LocalBrain } else {
-    (Read-Host '    Поставить? [Д/н]') -notmatch '^(н|n|нет|no)'
-}
-if ($wantLocal) {
-    & $py -c "import sys; sys.path.insert(0, r'$root'); from core import config; config.setup_console(); from core.local_brain import install; sys.exit(0 if install() else 1)"
-    if ($LASTEXITCODE -eq 0) { Готово 'свой мозг на месте' } else { Беда 'свой мозг не встал — Джарвис работает и без него, только с интернетом' }
+# В простом режиме не ставим (1,4 ГБ и нужна видеокарта): умный режим включается
+# ключом прямо в Telegram уже после установки — так «одна кнопка» остаётся быстрой.
+if (-not $Simple) {
+    Шаг 'Свой мозг для работы без интернета'
+    Write-Host '    Когда пропадает интернет или кончается бесплатный лимит Gemini, Джарвис'
+    Write-Host '    продолжает выполнять команды своей моделью на видеокарте. Это 1,4 ГБ.'
+    $wantLocal = if ($Unattended) { $LocalBrain } else {
+        (Read-Host '    Поставить? [Д/н]') -notmatch '^(н|n|нет|no)'
+    }
+    if ($wantLocal) {
+        & $py -c "import sys; sys.path.insert(0, r'$root'); from core import config; config.setup_console(); from core.local_brain import install; sys.exit(0 if install() else 1)"
+        if ($LASTEXITCODE -eq 0) { Готово 'свой мозг на месте' } else { Беда 'свой мозг не встал — Джарвис работает и без него, только с интернетом' }
+    }
 }
 
 # --- 7. Проверка -----------------------------------------------------------

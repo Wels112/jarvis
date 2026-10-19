@@ -153,7 +153,7 @@
     <h1>Установка Джарвиса</h1>
     <p class="lede">Голосовой помощник для Windows: открывает программы и сайты, включает видео,
       помнит дела и напоминает о них, ведёт расписание недели, пишет в Telegram и отвечает на
-      вопросы. Установка в пять шагов, около 20 минут. Эту страницу можно держать открытой и
+      вопросы. Установка в несколько шагов, около 20 минут. Эту страницу можно держать открытой и
       идти по шагам.</p>
     <div class="facts">
       <span class="fact">Windows 10 / 11</span>
@@ -175,14 +175,6 @@
     <h2>Установка</h2>
     <ol class="steps">
       <li><div class="step">
-        <h3>Поставьте Python</h3>
-        <p>Откройте <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org/downloads</a>,
-          нажмите жёлтую кнопку «Download Python», запустите скачанный файл и нажмите «Install Now».
-          Дождитесь «Setup was successful» и закройте окно. Больше там ничего настраивать не нужно.</p>
-        <span class="time">≈ 3 минуты</span>
-      </div></li>
-
-      <li><div class="step">
         <h3>Создайте бота в Telegram</h3>
         <p>Нужен, чтобы управлять Джарвисом с телефона. Делается на телефоне за минуту:</p>
         <ul>
@@ -197,6 +189,8 @@
         <h3>Запустите установку Джарвиса</h3>
         <p>В присланной папке дважды щёлкните по файлу <b>«Установить Джарвиса»</b>. Откроется чёрное
           окно — нажмите любую клавишу, чтобы начать. Если Windows спросит разрешение, нажмите «Да».</p>
+        <p class="note">Ничего ставить заранее не нужно: если на компьютере нет Python, установщик
+          скачает и поставит его сам. На сайт python.org заходить не надо.</p>
         <p>Установщик сам всё скачает и по ходу спросит (отвечаете и нажимаете <kbd>Enter</kbd>):</p>
         <ul>
           <li><b>куда поставить</b> — просто <kbd>Enter</kbd>;</li>
@@ -211,7 +205,7 @@
         <p class="note">Нет файла «Установить Джарвиса»? Тогда откройте «Пуск», наберите
           <b>PowerShell</b>, откройте его, вставьте строку ниже и нажмите <kbd>Enter</kbd>:</p>
         <div class="cmd">
-          <code id="install-cmd">powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; iwr -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t; & $t"</code>
+          <code id="install-cmd">powershell -NoProfile -ExecutionPolicy Bypass -Command "$t = Join-Path $env:TEMP 'jarvis-install.ps1'; iwr -UseBasicParsing 'https://raw.githubusercontent.com/Wels112/jarvis/main/install.ps1' -OutFile $t; & $t -Simple"</code>
           <button type="button" id="copy-btn">Копировать</button>
         </div>
       </div></li>
@@ -238,8 +232,13 @@
             и вставьте в окно.</li>
         </ul>
         <p>После этого закройте и снова откройте ярлык <b>«Джарвис»</b>.</p>
+        <p class="note"><b>Ещё проще — прислать ключ в Telegram.</b> Когда телефон уже подключён (шаг
+          выше), просто отправьте боту сообщение <code>ключ ВАШ_КЛЮЧ</code> — например
+          <code>ключ AIza…</code> для Gemini. Джарвис сам всё настроит и ответит «умный режим включён»,
+          перезапускать его не нужно. Если ключ начинается с <code>sk-</code>, допишите, чей он
+          (например <code>ключ sk-… proxyapi</code>), или ответьте названием сервиса, когда бот спросит.</p>
         <p class="note">Можно пропустить этот шаг — Джарвис и без умного режима открывает программы,
-          ставит напоминания, включает видео и управляет компьютером. Умный режим добавите в любой момент той же кнопкой.</p>
+          ставит напоминания, включает видео и управляет компьютером. Умный режим добавите в любой момент.</p>
       </div></li>
 
       <li><div class="step">

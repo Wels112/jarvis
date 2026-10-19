@@ -32,6 +32,7 @@
 """
 import io
 import json
+import os
 import re
 import secrets
 import threading
@@ -558,6 +559,81 @@ class Phone:
             self.send("Это личный ассистент, он отвечает только хозяину.", chat=chat)
         log.write("info", f"[телефон] чужой чат {chat} — не отвечаю")
 
+    # Ключи провайдеров: Gemini начинается с AIza, OpenAI-совместимые — с sk-.
+    _GEMINI_KEY = re.compile(r'\bAIza[0-9A-Za-z_\-]{30,}\b')
+    _SK_KEY = re.compile(r'\bsk-[0-9A-Za-z_\-]{20,}\b')
+    # Российские посредники без VPN и OpenAI — по слову-подсказке в сообщении.
+    _HOSTS = {
+        "proxyapi": ("https://api.proxyapi.ru/openai/v1", "ProxyAPI"),
+        "прокси":   ("https://api.proxyapi.ru/openai/v1", "ProxyAPI"),
+        "aitunnel": ("https://api.aitunnel.ru/v1", "AITUNNEL"),
+        "туннель":  ("https://api.aitunnel.ru/v1", "AITUNNEL"),
+        "openai":   ("https://api.openai.com/v1", "OpenAI"),
+    }
+
+    def _apply_api_key(self, text: str):
+        """Заказчик прислал ключ умного режима в чат — сами включаем и проверяем.
+
+        Gemini (AIza…) узнаём сразу. Для ключа sk-… нужен сервис: берём из слова
+        рядом («proxyapi», «aitunnel», «openai»), иначе переспрашиваем одним словом.
+        Возвращаем текст ответа, если ключ обработан, иначе None (обычное сообщение).
+        """
+        low = text.lower()
+
+        m = self._GEMINI_KEY.search(text)
+        if m:
+            config.set_env("GEMINI_API_KEY", m.group(0))
+            os.environ["GEMINI_API_KEY"] = m.group(0)
+            config.update_setting("brain.provider", "gemini")
+            config.update_setting("brain.model", "gemini-3.5-flash-lite")
+            return self._reload_brain_reply("Gemini", vpn=True)
+
+        m = self._SK_KEY.search(text)
+        if m:
+            host = name = None
+            for word, (h, n) in self._HOSTS.items():
+                if word in low:
+                    host, name = h, n
+                    break
+            if not host:
+                brain = self.j.cfg.get("brain", {})
+                if brain.get("provider") == "openai" and brain.get("base_url"):
+                    host, name = brain["base_url"], "ваш сервис"
+                else:
+                    self._pending_key = m.group(0)
+                    return ("Ключ принял. Это ключ какого сервиса? Ответьте одним словом: "
+                            "ProxyAPI, AITUNNEL или OpenAI.")
+            return self._set_openai_key(m.group(0), host, name)
+
+        # Пришло имя сервиса, а ключ ждал с прошлого сообщения.
+        if getattr(self, "_pending_key", ""):
+            for word, (host, name) in self._HOSTS.items():
+                if word in low:
+                    key, self._pending_key = self._pending_key, ""
+                    return self._set_openai_key(key, host, name)
+
+        return None
+
+    def _set_openai_key(self, key: str, host: str, name: str) -> str:
+        config.set_env("CLOUD_API_KEY", key)
+        os.environ["CLOUD_API_KEY"] = key
+        config.update_setting("brain.provider", "openai")
+        config.update_setting("brain.base_url", host.rstrip("/"))
+        config.update_setting("brain.model", "gpt-4o-mini")
+        return self._reload_brain_reply(name, vpn=False)
+
+    def _reload_brain_reply(self, name: str, vpn: bool) -> str:
+        tail = " Не забывайте включать VPN." if vpn else " VPN не нужен."
+        try:
+            ok = self.j.reload_brain()
+        except Exception as e:
+            log.write("error", f"[мозг] перезапуск после ключа не удался: {e}")
+            return f"Ключ сохранил, но перезапустить умный режим не вышло. Закройте и откройте Джарвиса.{tail}"
+        if ok:
+            return f"Готово — умный режим включён ({name}).{tail}"
+        return (f"Ключ сохранил ({name}), но проверить связь сейчас не вышло — "
+                f"возможно, нужен VPN или пополнить баланс. Попробую сам, когда появится связь.{tail}")
+
     def _handle(self, message: dict):
         chat = (message.get("chat") or {}).get("id", 0)
         if not chat:
@@ -590,6 +666,12 @@ class Phone:
         else:
             text = (message.get("text") or "").strip()
         if not text:
+            return
+        # Ключ умного режима прямо в чат: «ключ AIza…» или «ключ sk-…».
+        # Проверяем до журнала и до мозга, чтобы ключ не попал в логи и не ушёл в ответ.
+        handled = self._apply_api_key(text)
+        if handled is not None:
+            self.send(handled)
             return
         if text.split()[0] == "/notes":
             ok = self.sync_digest(renew=True)

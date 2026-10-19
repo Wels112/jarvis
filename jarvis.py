@@ -185,6 +185,21 @@ class Jarvis:
         if self.tray:
             self.tray.set_state(state)
 
+    def reload_brain(self) -> bool:
+        """Пересобрать облачный мозг после смены ключа/провайдера на лету.
+
+        Нужно, когда заказчик прислал ключ прямо в Telegram (core/phone.py):
+        перечитываем провайдера из настроек, поднимаем мозг заново — без повторных
+        фоновых обходов дисков, которые делает _init_brain при старте.
+        Возвращает True, если облако отвечает.
+        """
+        from core.brain import make_cloud_brain
+        from core.local_brain import HybridBrain
+        self.brain = HybridBrain(make_cloud_brain(self.cfg), self.cfg)
+        from skills import training
+        training.LOCAL = getattr(self.brain, "local", None)
+        return bool(self.brain and self.brain.ready)
+
     def _init_brain(self):
         try:
             from core.brain import make_cloud_brain
