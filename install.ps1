@@ -280,6 +280,13 @@ if (-not $NoShortcut) {
     $sc.WorkingDirectory = $root
     $sc.Save()
     Готово "ярлык на рабочем столе: Джарвис"
+    # Окно-чат (общаться текстом). Запускает тот же jarvis.bat: если Джарвис уже
+    # работает, второй запуск поднимает его окно по имени «Jarvis» (skills/chatbox.py).
+    $sc3 = $shell.CreateShortcut("$([Environment]::GetFolderPath('Desktop'))\Джарвис — чат.lnk")
+    $sc3.TargetPath = "$root\jarvis.bat"
+    $sc3.WorkingDirectory = $root
+    $sc3.Save()
+    Готово "ярлык на рабочем столе: Джарвис — чат"
     # Планировщик недели — своё окно, работает и без запущенного Джарвиса
     & $py -c "import sys; sys.path.insert(0, r'$root'); from skills import planner; planner.make_shortcut()" 2>$null
     if ($LASTEXITCODE -eq 0) { Готово "ярлык на рабочем столе: Планировщик" }

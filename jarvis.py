@@ -117,6 +117,7 @@ class Jarvis:
         self._answer = []              # собранный текст ответа
         self._talk_lock = threading.Lock()
         self.phone = None
+        self.chat = None               # окно-чат на компьютере (текстом), skills/chatbox.py
         self.running = True
         self.paused = False            # трей и Ctrl+Alt+P
         self.tray = None
@@ -148,6 +149,7 @@ class Jarvis:
             hk.add("ctrl+alt+j", self._hk_wake, "Ctrl+Alt+J — позвать")
             hk.add("ctrl+alt+s", self._hk_stop, "Ctrl+Alt+S — замолчать")
             hk.add("ctrl+alt+p", self._hk_pause, "Ctrl+Alt+P — пауза")
+            hk.add("ctrl+alt+t", self._hk_chat, "Ctrl+Alt+T — окно-чат")
             if hk.start():
                 self.hotkeys = hk
         except Exception as e:
@@ -180,6 +182,11 @@ class Jarvis:
         else:
             self.paused = not self.paused
             self.say("Пауза." if self.paused else "Снова слушаю.")
+
+    def _hk_chat(self):
+        """Ctrl+Alt+T — показать окно-чат (текстовый ввод)."""
+        if self.chat:
+            self.chat.show()
 
     def _set_tray(self, state: str):
         if self.tray:
@@ -718,6 +725,18 @@ class Jarvis:
         except Exception as e:
             print(f"[планировщик] не поднялся: {e}")
 
+    def _init_chat(self):
+        """Окно-чат на компьютере (общаться текстом, skills/chatbox.py).
+        Не поднялось (нет tkinter) — не беда, остаются голос и телефон."""
+        try:
+            from skills.chatbox import ChatBox
+            box = ChatBox(self)
+            if box.start():
+                self.chat = box
+                print("[чат] окно текстового общения открыто (Ctrl+Alt+T)")
+        except Exception as e:
+            print(f"[чат] окно не поднялось: {e}")
+
     def run_text(self):
         print(BANNER)
         print("Текстовый режим. Пиши команды, «выход» — закончить.\n")
@@ -759,9 +778,14 @@ class Jarvis:
         print("Ctrl+C — выход\n")
         self._init_phone()
         self._init_planner()
+        self._init_chat()
         self.say(f"{name} на связи. Слушаю.")
         if getattr(self, "_pair_hint", ""):
             self.say(self._pair_hint)
+            # Телефон не подключён — покажем окно с кодом: на слух его легко
+            # ослышаться (жалоба заказчика 20.10.2026), а тут он виден текстом.
+            if self.chat:
+                self.chat.show()
         # Будильник поднимаем после приветствия: иначе просроченное напоминание
         # звучало раньше «Джарвис на связи» — как будто он заговорил посреди фразы
         threading.Thread(target=self._reminder_loop, daemon=True).start()

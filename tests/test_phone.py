@@ -239,7 +239,7 @@ def main():
         ctx_before = memory.context_for_llm(dialog=True)
         wrong = "000000" if code != "000000" else "111111"
         fresh._handle({"chat": {"id": OWNER}, "text": wrong})
-        step_wrong = (fresh.owner == 0 and pf.texts() and "отправь код" in pf.texts()[-1])
+        step_wrong = (fresh.owner == 0 and pf.texts() and "код" in pf.texts()[-1] and "окне" in pf.texts()[-1])
         pf.clear()
         fresh._handle({"chat": {"id": OWNER}, "text": " ".join(code)})       # с пробелами, как продиктован
         saved = json.loads(settings.read_text(encoding="utf-8"))
@@ -257,11 +257,14 @@ def main():
         brute = Phone(j)
         brute.token = "тест"
         bf = FakePhone(brute)
-        for i in range(7):
+        for i in range(8):
             brute._handle({"chat": {"id": STRANGER}, "text": f"{i:06d}" if f"{i:06d}" != brute.pair_code else "x"})
-        replies = len(bf.texts())
-        brute._handle({"chat": {"id": STRANGER}, "text": brute.pair_code})
-        step_brute = replies == 5 and brute.owner == 0
+        msgs = bf.texts()
+        # 5 обычных отказов, затем одно «слишком много попыток» (выход для хозяина), дальше тишина
+        before = len(bf.texts())
+        brute._handle({"chat": {"id": STRANGER}, "text": brute.pair_code})   # верный код после блокировки — не принимаем
+        step_brute = (len(msgs) == 6 and "Слишком много" in msgs[-1]
+                      and brute.owner == 0 and len(bf.texts()) == before)
     finally:
         config.CONFIG_FILE = real_file
         settings.unlink(missing_ok=True)
